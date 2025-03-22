@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 # Import the detection system
-from detection_system_simplified import init_detection_system, start_detection_system
+from detection_system import init_detection_system, start_detection_system
 
 # Initialize Flask app
 app = Flask(__name__, 
