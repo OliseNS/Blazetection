@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detection System Dashboard</title>
+    <style>
+        /* Main Styles - Optimized for Pi */
+        :root {
+            --primary-color: #4a6cf7;
+            --danger-color: #f74a4a;
+            --success-color: #4af74a;
+            --warning-color: #f7d94a;
+            --info-color: #4acdf7;
+            --dark-color: #2c3e50;
+            --light-color: #f8f9fa;
+            --gray-color: #6c757d;
+            --border-radius: 8px;
+            --box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: #f0f2f5;
+            color: var(--dark-color);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        header h1 {
+            font-size: 24px;
+            color: var(--dark-color);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        /* Cards */
+        .card {
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .card-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 15px;
+        }
+
+        .card-header h2 {
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 15px;
+        }
+
+        /* Toggle Switches */
+        .toggle-container {
+            margin-bottom: 12px;
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        .toggle-label {
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 22px;
+            background-color: #ccc;
+            border-radius: 22px;
+            transition: var(--transition);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+            transition: var(--transition);
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background-color: var(--primary-color);
+        }
+
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 8px 12px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #3a5bd7;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #d73a3a;
+        }
+
+        /* Status Indicator */
+        #status-indicator {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .status-normal {
+            background-color: var(--success-color);
+            color: #fff;
+        }
+
+        .status-fire {
+            background-color: var(--danger-color);
+            color: #fff;
+        }
+
+        .status-smoke {
+            background-color: var(--warning-color);
+            color: #333;
+        }
+
+        .status-person {
+            background-color: var(--info-color);
+            color: #333;
+        }
+
+        /* Alarm Control */
+        .alarm-control {
+            display: flex;
+            justify-content: center;
+            margin-top: 12px;
+        }
+
+        /* Faces Gallery */
+        .faces-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+        }
+
+        .face-item {
+            position: relative;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--box-shadow);
+            height: 80px;
+            cursor: pointer;
+        }
+
+        .face-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .face-item:hover img {
+            transform: scale(1.05);
+        }
+
+        .face-timestamp {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 9px;
+            padding: 2px 4px;
+            text-align: center;
+        }
+
+        .no-faces {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 15px;
+            color: var(--gray-color);
+            font-size: 14px;
+        }
+
+        /* Modal for expanded face images */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            overflow: auto;
+        }
+
+        .modal-content {
+            position: relative;
+            margin: auto;
+            display: block;
+            max-width: 80%;
+            max-height: 80%;
+            padding: 15px;
+        }
+
+        .modal-image {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            color: #f1f1f1;
+            font-size: 30px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            #status-indicator {
+                margin-top: 8px;
+            }
+            
+            .modal-content {
+                max-width: 95%;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Detection System Dashboard</h1>
+            <div id="status-indicator" class="status-normal">
+                <span id="status-icon"><i class="fas fa-check-circle"></i></span>
+                <span id="status-text">Normal</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Detection Controls</h2>
+                </div>
+                <div class="card-body">
+                    <div class="toggle-container">
+                        <label class="toggle">
+                            <span class="toggle-label"><i class="fas fa-fire"></i> Fire Detection</span>
+                            <input type="checkbox" id="fire-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-container">
+                        <label class="toggle">
+                            <span class="toggle-label"><i class="fas fa-smog"></i> Smoke Detection</span>
+                            <input type="checkbox" id="smoke-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-container">
+                        <label class="toggle">
+                            <span class="toggle-label"><i class="fas fa-user"></i> Person Detection</span>
+                            <input type="checkbox" id="person-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-container">
+                        <label class="toggle">
+                            <span class="toggle-label"><i class="fas fa-user-circle"></i> Face Detection</span>
+                            <input type="checkbox" id="face-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="alarm-control">
+                        <button id="stop-alarm" class="btn btn-danger">
+                            <i class="fas fa-bell-slash"></i> Stop Alarm
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Telegram Configuration</h2>
+                </div>
+                <div class="card-body">
+                    <div class="toggle-container">
+                        <label class="toggle">
+                            <span class="toggle-label"><i class="fab fa-telegram"></i> Enable Telegram</span>
+                            <input type="checkbox" id="telegram-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="telegram-token">Bot Token</label>
+                        <input type="text" id="telegram-token" placeholder="Enter your Telegram bot token">
+                    </div>
+                    <div class="form-group">
+                        <label for="telegram-chat-id">Chat ID</label>
+                        <input type="text" id="telegram-chat-id" placeholder="Enter your Telegram chat ID">
+                    </div>
+                    <div class="form-group">
+                        <label for="telegram-cooldown">Notification Cooldown (seconds)</label>
+                        <input type="number" id="telegram-cooldown" min="10" value="30">
+                    </div>
+                    <div class="alarm-control">
+                        <button id="save-telegram" class="btn btn-primary">Save Telegram Settings</button>
+                    </div>
+                    <div class="alarm-control">
+                        <button id="test-telegram" class="btn btn-primary">Test Telegram Connection</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Recent Faces</h2>
+                </div>
+                <div class="card-body">
+                    <div id="faces-gallery" class="faces-gallery">
+                        <!-- Face images will be loaded here dynamically -->
+                        <div class="no-faces">No faces detected yet</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for expanded face images -->
+    <div id="face-modal" class="modal">
+        <span class="close-modal">&times;</span>
+        <div class="modal-content">
+            <img id="modal-image" class="modal-image" src="" alt="Expanded Face">
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fireToggle = document.getElementById('fire-toggle');
+        const smokeToggle = document.getElementById('smoke-toggle');
+        const personToggle = document.getElementById('person-toggle');
+        const faceToggle = document.getElementById('face-toggle');
+        const telegramToggle = document.getElementById('telegram-toggle');
+        const telegramToken = document.getElementById('telegram-token');
+        const telegramChatId = document.getElementById('telegram-chat-id');
+        const telegramCooldown = document.getElementById('telegram-cooldown');
+        const saveTelegramBtn = document.getElementById('save-telegram');
+        const testTelegramBtn = document.getElementById('test-telegram');
+        const stopAlarmBtn = document.getElementById('stop-alarm');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusIcon = document.getElementById('status-icon');
+        const statusText = document.getElementById('status-text');
+        const facesGallery = document.getElementById('faces-gallery');
+        const faceModal = document.getElementById('face-modal');
+        const modalImage = document.getElementById('modal-image');
+        const closeModal = document.querySelector('.close-modal');
+
+        // Configuration and Status
+        let config = {};
+        let systemStatus = 'Normal';
+
+        // Initialize the dashboard
+        function initDashboard() {
+            // Load initial configuration
+            fetchConfig();
+            
+            // Load initial status
+            fetchStatus();
+            
+            // Load initial faces
+            fetchFaces();
+            
+            // Set up event listeners
+            setupEventListeners();
+            
+            // Set up periodic updates - optimized for Pi
+            setInterval(fetchStatus, 2000);  // Update status every 2 seconds
+            setInterval(fetchFaces, 5000);   // Update faces every 5 seconds
+        }
+
+        // Fetch configuration from server
+        function fetchConfig() {
+            fetch('/api/config')
+                .then(response => response.json())
+                .then(data => {
+                    config = data;
+                    updateConfigUI();
+                })
+                .catch(error => console.error('Error fetching config:', error));
+        }
+
+        // Update UI based on configuration
+        function updateConfigUI() {
+            // Detection toggles
+            fireToggle.checked = config.detection?.fire ?? true;
+            smokeToggle.checked = config.detection?.smoke ?? true;
+            personToggle.checked = config.detection?.person ?? true;
+            faceToggle.checked = config.detection?.face ?? true;
+            
+            // Telegram settings
+            telegramToggle.checked = config.telegram?.enabled ?? false;
+            telegramToken.value = config.telegram?.token ?? '';
+            telegramChatId.value = config.telegram?.chat_id ?? '';
+            telegramCooldown.value = config.telegram?.cooldown ?? 30;
+        }
+
+        // Fetch system status from server
+        function fetchStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    updateStatusUI(data);
+                })
+                .catch(error => console.error('Error fetching status:', error));
+        }
+
+        // Update UI based on system status
+        function updateStatusUI(data) {
+            systemStatus = data.status;
+            
+            // Update status indicator
+            statusText.textContent = systemStatus;
+            
+            // Update status indicator appearance based on status
+            statusIndicator.className = ''; // Clear existing classes
+            
+            switch(systemStatus.toLowerCase()) {
+                case 'fire detected':
+                case 'fire & smoke detected':
+                case 'fire pre-alert':
+                    statusIndicator.classList.add('status-fire');
+                    statusIcon.innerHTML = '<i class="fas fa-fire"></i>';
+                    break;
+                case 'smoke detected':
+                case 'smoke pre-alert':
+                    statusIndicator.classList.add('status-smoke');
+                    statusIcon.innerHTML = '<i class="fas fa-smog"></i>';
+                    break;
+                case 'person detected':
+                    statusIndicator.classList.add('status-person');
+                    statusIcon.innerHTML = '<i class="fas fa-user"></i>';
+                    break;
+                case 'face detected':
+                    statusIndicator.classList.add('status-person');
+                    statusIcon.innerHTML = '<i class="fas fa-user-circle"></i>';
+                    break;
+                default:
+                    statusIndicator.classList.add('status-normal');
+                    statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+            }
+        }
+
+        // Fetch recent faces from server
+        function fetchFaces() {
+            fetch('/api/faces')
+                .then(response => response.json())
+                .then(data => {
+                    updateFacesGallery(data.faces);
+                })
+                .catch(error => console.error('Error fetching faces:', error));
+        }
+
+        // Update faces gallery
+        function updateFacesGallery(faces) {
+            if (!faces || faces.length === 0) {
+                facesGallery.innerHTML = '<div class="no-faces">No faces detected yet</div>';
+                return;
+            }
+            
+            let galleryHTML = '';
+            
+            faces.forEach(face => {
+                // Extract timestamp from filename (assuming format face_TIMESTAMP.jpg)
+                const timestamp = face.replace('face_', '').replace('.jpg', '');
+                
+                galleryHTML += `
+                    <div class="face-item" onclick="openModal('/faces/${face}')">
+                        <img src="/faces/${face}" alt="Detected Face" onerror="this.src='data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22100%22%20height%3D%22100%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_1%20text%20%7B%20fill%3A%23999%3Bfont-weight%3Anormal%3Bfont-family%3AArial%2C%20Helvetica%2C%20Open%20Sans%2C%20sans-serif%2C%20monospace%3Bfont-size%3A10pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_1%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22%23eee%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%2220%22%20y%3D%2255%22%3EImage%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E';">
+                        <div class="face-timestamp">ID: ${timestamp}</div>
+                    </div>
+                `;
+            });
+            
+            facesGallery.innerHTML = galleryHTML;
+        }
+
+        // Open modal with expanded face image
+        function openModal(imageSrc) {
+            modalImage.src = imageSrc;
+            faceModal.style.display = 'flex';
+        }
+
+        // Close modal
+        function closeModalFunc() {
+            faceModal.style.display = 'none';
+        }
+
+        // Set up event listeners for UI interactions
+        function setupEventListeners() {
+            // Detection toggles
+            fireToggle.addEventListener('change', () => {
+                updateDetectionConfig('fire', fireToggle.checked);
+            });
+            
+            smokeToggle.addEventListener('change', () => {
+                updateDetectionConfig('smoke', smokeToggle.checked);
+            });
+            
+            personToggle.addEventListener('change', () => {
+                updateDetectionConfig('person', personToggle.checked);
+            });
+            
+            faceToggle.addEventListener('change', () => {
+                updateDetectionConfig('face', faceToggle.checked);
+            });
+            
+            // Telegram settings
+            saveTelegramBtn.addEventListener('click', saveTelegramSettings);
+            
+            // Test Telegram connection
+            testTelegramBtn.addEventListener('click', testTelegramConnection);
+            
+            // Stop alarm button
+            stopAlarmBtn.addEventListener('click', stopAlarm);
+            
+            // Modal close button
+            closeModal.addEventListener('click', closeModalFunc);
+            
+            // Close modal when clicking outside the image
+            window.addEventListener('click', (event) => {
+                if (event.target === faceModal) {
+                    closeModalFunc();
+                }
+            });
+            
+            // Close modal with Escape key
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && faceModal.style.display === 'flex') {
+                    closeModalFunc();
+                }
+            });
+        }
+
+        // Update detection configuration
+        function updateDetectionConfig(type, enabled) {
+            const values = {};
+            values[type] = enabled;
+            
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    section: 'detection',
+                    values: values
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to update detection config:', data.error);
+                    // Revert toggle if update failed
+                    switch(type) {
+                        case 'fire': fireToggle.checked = !enabled; break;
+                        case 'smoke': smokeToggle.checked = !enabled; break;
+                        case 'person': personToggle.checked = !enabled; break;
+                        case 'face': faceToggle.checked = !enabled; break;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error updating detection config:', error);
+                // Revert toggle on error
+                switch(type) {
+                    case 'fire': fireToggle.checked = !enabled; break;
+                    case 'smoke': smokeToggle.checked = !enabled; break;
+                    case 'person': personToggle.checked = !enabled; break;
+                    case 'face': faceToggle.checked = !enabled; break;
+                }
+            });
+        }
+
+        // Save Telegram settings
+        function saveTelegramSettings() {
+            const values = {
+                enabled: telegramToggle.checked,
+                token: telegramToken.value,
+                chat_id: telegramChatId.value,
+                cooldown: parseInt(telegramCooldown.value) || 30
+            };
+            
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    section: 'telegram',
+                    values: values
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Telegram settings saved successfully!');
+                } else {
+                    alert('Failed to save Telegram settings: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error saving Telegram settings:', error);
+                alert('Error saving Telegram settings. Please try again.');
+            });
+        }
+        
+        // Test Telegram connection
+        function testTelegramConnection() {
+            fetch('/api/telegram/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Test message sent successfully! Check your Telegram.');
+                } else {
+                    alert('Failed to send test message: ' + (data.error || 'Telegram might not be properly configured'));
+                }
+            })
+            .catch(error => {
+                console.error('Error testing Telegram:', error);
+                alert('Error testing Telegram connection. Please check your settings.');
+            });
+        }
+
+        // Stop alarm
+        function stopAlarm() {
+            fetch('/api/alarm/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to stop alarm:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error stopping alarm:', error);
+            });
+        }
+
+        // Initialize the dashboard when the page loads
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
