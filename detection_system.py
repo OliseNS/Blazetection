@@ -11,11 +11,11 @@ from datetime import datetime
 import pygame
 import os
 import time
-from datetime import datetime
 import asyncio
+from datetime import datetime
 from telegram import Bot, InputFile
 from telegram.ext import Application, ApplicationBuilder
-
+from gpiozero import DigitalInputDevice 
 import flask
 from flask import Flask, render_template, request, jsonify, send_from_directory
 
@@ -127,13 +127,6 @@ class ConfigManager:
             return self.config["detection"].get(detection_type, False)
         except:
             return False
-
-import os
-import time
-import asyncio
-from datetime import datetime
-from telegram import Bot, InputFile
-from telegram.ext import Application, ApplicationBuilder
 
 class TelegramService:
     """
@@ -264,177 +257,43 @@ class TelegramService:
     def send_fire_alert(self, image_path=None):
         """Send a fire detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nImmediate action is required!"
+        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nEvacuate the area immediately and contact emergency services."
         print(f"Sending fire alert with image: {image_path}")
         return self.send_notification(message, image_path, "fire")
 
     def send_smoke_alert(self, image_path=None):
         """Send a smoke detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
+        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!.\nYou can configure settings here http://127.0.0.1:8080/"
         print(f"Sending smoke alert with image: {image_path}")
         return self.send_notification(message, image_path, "smoke")
 
     def send_person_alert(self, image_path=None):
         """Send a person detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👤 PERSON DETECTED! 👤\nTimestamp: {timestamp}"
+        message = f"👤 PERSON DETECTED in monitored area 👤\nTimestamp: {timestamp} \nYou can configure settings here http://127.0.0.1:8080/"
         return self.send_notification(message, image_path, "person")
 
     def send_face_alert(self, image_path=None):
         """Send a face detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}"
+        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}\nYou can configure settings here http://127.0.0.1:8080/"
         return self.send_notification(message, image_path, "face")
 
     def send_test_message(self):
         """Send a test message to verify Telegram configuration."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}"
+        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}\nYou can configure settings here http://127.0.0.1:8080/"
         return self.send_notification(message, None, "test")
 
-'''
-class TelegramService:
-    """
-    Service for sending notifications and images to Telegram.
-    """
-
-    def __init__(self, config_manager):
-        self.config_manager = config_manager
-        self.config = self.config_manager.get_config()
-        self.bot = None
-        self.last_notification_time = {}  # Track last notification time by type
-        self.setup_bot()
-
-    def reload_config(self):
-        """Reload configuration and update bot if needed."""
-        old_config = self.config
-        self.config = self.config_manager.get_config()
-
-        # If token changed, reinitialize the bot
-        if old_config["telegram"]["token"] != self.config["telegram"]["token"]:
-            self.setup_bot()
-
-    def setup_bot(self):
-        """Initialize Telegram bot with current configuration."""
-        token = self.config["telegram"].get("token")
-        enabled = self.config["telegram"].get("enabled", False)
-
-        if not enabled or not token:
-            self.bot = None
-            print("Telegram bot is disabled or token is missing.")
-            return
-
-        try:
-            self.bot = Bot(token=token)
-            print(f"Telegram bot initialized with token: {token[:5]}...")
-        except TelegramError as e:
-            print(f"Error initializing Telegram bot: {e}")
-            self.bot = None
-
-    def is_enabled(self):
-        """Check if Telegram notifications are enabled."""
-        return (
-            self.config["telegram"].get("enabled", False)
-            and self.bot is not None
-            and self.config["telegram"].get("chat_id") is not None
-        )
-
-    def can_send_notification(self, notification_type):
-        """
-        Check if a notification can be sent based on cooldown period.
-        """
-        if not self.is_enabled():
-            print("Telegram notifications not enabled.")
-            return False
-
-        current_time = time.time()
-        cooldown = self.config["telegram"].get("cooldown", 0)
-
-        last_time = self.last_notification_time.get(notification_type, 0)
-        if current_time - last_time >= cooldown:
-            return True
-
-        print(
-            f"Telegram notification on cooldown for type: {notification_type}. "
-            f"Next notification in {cooldown - (current_time - last_time):.1f} seconds."
-        )
-        return False
-
-    async def send_notification_async(self, message, image_path=None, notification_type="general"):
-        """
-        Send a notification message and optionally an image to Telegram asynchronously.
-        """
-        if not self.is_enabled():
-            print("Telegram notifications not enabled.")
-            return False
-
-        if not self.can_send_notification(notification_type):
-            return False
-
-        self.last_notification_time[notification_type] = time.time()
-        chat_id = self.config["telegram"]["chat_id"]
-
-        try:
-            if image_path and os.path.exists(image_path):
-                with open(image_path, 'rb') as image_file:
-                    await self.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=image_file,
-                        caption=message,
-                    )
-                print(f"Telegram image sent: {image_path}")
-            else:
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
-                )
-                print("Telegram message sent without image.")
-
-            print(f"Telegram notification sent: {notification_type}")
-            return True
-        except TelegramError as e:
-            print(f"Error sending Telegram notification: {e}")
-            return False
-
-    def send_notification(self, message, image_path=None, notification_type="general"):
-        """
-        Synchronous wrapper for send_notification_async.
-        """
-        return asyncio.run(self.send_notification_async(message, image_path, notification_type))
-
-    def send_fire_alert(self, image_path=None):
-        """Send fire detection alert."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nImmediate action is required!"
-        print(f"Sending fire alert with image: {image_path}")
-        return self.send_notification(message, image_path, "fire")
-
-    def send_smoke_alert(self, image_path=None):
-        """Send smoke detection alert."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
-        print(f"Sending smoke alert with image: {image_path}")
-        return self.send_notification(message, image_path, "smoke")
-
-    def send_person_alert(self, image_path=None):
-        """Send person detection alert."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👤 PERSON DETECTED! 👤\nTimestamp: {timestamp}"
-        return self.send_notification(message, image_path, "person")
-
-    def send_face_alert(self, image_path=None):
-        """Send face detection alert."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}"
-        return self.send_notification(message, image_path, "face")
-
-    def send_test_message(self):
+    def send_welcome_message(self):
         """Send a test message to verify Telegram configuration."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}"
+        message = f"Your Sys\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}\nYou can configure settings here http://127.0.0.1:8080/"
         return self.send_notification(message, None, "test")
-'''
+    
+
+
 # Camera handling
 class Camera:
     def __init__(self, camera_index=0):
@@ -507,7 +366,16 @@ class DetectionSystem:
     def __init__(self, config_path="config.json"):
         # Initialize pygame for alarm sounds
         pygame.mixer.init()
-        
+
+        # Try to initialize MQ2 sensor on GPIO17
+        try:
+            self.mq2 = DigitalInputDevice(17)
+            self.smoke_sensor_thread = threading.Thread(target=self.monitor_smoke_sensor, daemon=True)
+            self.smoke_sensor_thread.start()
+            print(f"{Colors.GREEN}MQ2 sensor initialized on GPIO17{Colors.RESET}")
+        except Exception as e:
+            self.mq2 = None
+            print(f"{Colors.YELLOW}MQ2 sensor not found or failed to initialize: {str(e)}{Colors.RESET}")
         # Clean up old face images on startup
         self.cleanup_old_images()
         
@@ -603,6 +471,11 @@ class DetectionSystem:
         self.running = True
         print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
         
+        # Send a Telegram message to notify that the system has started
+        if self.telegram_service.is_enabled():
+            print(f"{Colors.GREEN}Sending system start notification via Telegram...{Colors.RESET}")
+            self.telegram_service.send_test_message()
+
         try:
             while self.running:
                 success, frame = self.camera.read_frame()
@@ -857,6 +730,22 @@ class DetectionSystem:
         
         return face_roi, face_center
     
+    def monitor_smoke_sensor(self):
+        """Monitor the MQ2 sensor for smoke detection."""
+        while self.running:
+            try:
+                # Detect gas presence (LOW signal indicates gas)
+                if self.mq2.value == 0:
+                    print(f"{Colors.RED}Gas detected by MQ2 sensor! Triggering alarm...{Colors.RESET}")
+                    self.update_alarm_state(fire=False, smoke=True)  # Trigger smoke alarm
+                else:
+                    print(f"{Colors.GREEN}No gas detected by MQ2 sensor.{Colors.RESET}")
+                
+                # Delay between readings
+                time.sleep(1)  # Adjust as needed
+            except Exception as e:
+                print(f"{Colors.RED}Error monitoring MQ2 sensor: {str(e)}{Colors.RESET}")
+                
     def update_alarm_state(self, fire, smoke, image_path=None):
         """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
         if fire and self.config["detection"]["fire"]:
