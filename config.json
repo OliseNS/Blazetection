@@ -6,9 +6,9 @@
     "face": true
   },
   "telegram": {
-    "enabled": false,
-    "token": "",
-    "chat_id": "",
+    "enabled": true,
+    "token": "7617318916:AAEkSQv3jGwcKbARlDVuMby550LoepoKjto",
+    "chat_id": "1946046256",
     "cooldown": 30
   },
   "system": {

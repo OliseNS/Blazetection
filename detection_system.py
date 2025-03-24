@@ -9,9 +9,13 @@ import mediapipe as mp
 from scipy.spatial.distance import euclidean
 from datetime import datetime
 import pygame
-import telegram
+import os
+import time
+from datetime import datetime
 import asyncio
-import telegram 
+from telegram import Bot, InputFile
+from telegram.ext import Application, ApplicationBuilder
+
 import flask
 from flask import Flask, render_template, request, jsonify, send_from_directory
 
@@ -124,156 +128,313 @@ class ConfigManager:
         except:
             return False
 
-# Telegram integration
+import os
+import time
+import asyncio
+from datetime import datetime
+from telegram import Bot, InputFile
+from telegram.ext import Application, ApplicationBuilder
+
 class TelegramService:
     """
-    Service for sending notifications and images to Telegram
+    Service for sending notifications and images to Telegram.
     """
+
     def __init__(self, config_manager):
         self.config_manager = config_manager
-        self.config = config_manager.get_config()
-        self.bot = None
+        self.config = self.config_manager.get_config()
+        self.token = self.config["telegram"]["token"]
+        self.chat_id = self.config["telegram"]["chat_id"]
+        self.cooldown = self.config["telegram"]["cooldown"]
         self.last_notification_time = {}  # Track last notification time by type
+        self.application = None
+        self.bot = None
+        self.loop = asyncio.get_event_loop()
         self.setup_bot()
-        
+
     def reload_config(self):
-        """Reload configuration and update bot if needed"""
+        """Reload configuration and update bot if needed."""
         old_config = self.config
         self.config = self.config_manager.get_config()
-        
-        # If token changed, reinitialize the bot
         if old_config["telegram"]["token"] != self.config["telegram"]["token"]:
+            self.token = self.config["telegram"]["token"]
+            self.chat_id = self.config["telegram"]["chat_id"]
+            self.cooldown = self.config["telegram"]["cooldown"]
             self.setup_bot()
-    
+
     def setup_bot(self):
-        """Initialize Telegram bot with current configuration"""
-        if not self.config["telegram"]["enabled"] or not self.config["telegram"]["token"]:
+        """Initialize Telegram bot with current configuration."""
+        if not self.config["telegram"]["enabled"] or not self.token:
             self.bot = None
+            self.application = None
             return
-            
+
         try:
-            self.bot = telegram.Bot(token=self.config["telegram"]["token"])
-            print(f"Telegram bot initialized with token: {self.config['telegram']['token'][:5]}...")
+            self.application = (
+                ApplicationBuilder()
+                .token(self.token)
+                .concurrent_updates(True)  # Enable concurrent handling of updates
+                .build()
+            )
+            self.bot = self.application.bot
+            print(f"Telegram bot initialized with token: {self.token[:5]}...")
         except Exception as e:
-            print(f"Error initializing Telegram bot: {str(e)}")
+            print(f"Error initializing Telegram bot: {e}")
             self.bot = None
-    
+            self.application = None
+
     def is_enabled(self):
-        """Check if Telegram notifications are enabled"""
-        return (self.config["telegram"]["enabled"] and 
-                self.bot is not None and 
-                self.config["telegram"]["chat_id"])
-    
+        """Check if Telegram notifications are enabled."""
+        return (
+            self.config["telegram"]["enabled"]
+            and self.bot is not None
+            and self.chat_id is not None
+        )
+
     def can_send_notification(self, notification_type):
         """
-        Check if a notification can be sent based on cooldown period
+        Check if a notification can be sent based on a cooldown period.
         """
         if not self.is_enabled():
-            print(f"Telegram notifications not enabled")
+            print("Telegram notifications not enabled")
             return False
-            
+
         current_time = time.time()
-        cooldown = self.config["telegram"]["cooldown"]
-        
-        # If this type hasn't been sent before or cooldown has passed
-        if (notification_type not in self.last_notification_time or
-                current_time - self.last_notification_time[notification_type] >= cooldown):
+        if (notification_type not in self.last_notification_time or 
+                (current_time - self.last_notification_time[notification_type]) >= self.cooldown):
             return True
-            
-        print(f"Telegram notification on cooldown for type: {notification_type}. " +
-              f"Next notification in {cooldown - (current_time - self.last_notification_time[notification_type]):.1f} seconds")
+
+        remaining = self.cooldown - (current_time - self.last_notification_time[notification_type])
+        print(f"Telegram notification on cooldown for type: {notification_type}. Next notification in {remaining:.1f} seconds")
         return False
-    
+
     async def send_notification_async(self, message, image_path=None, notification_type="general"):
         """
-        Send a notification message and optionally an image to Telegram using asyncio
+        Asynchronously send a notification message (and optionally an image) to Telegram.
         """
         if not self.is_enabled():
-            print(f"Telegram notifications not enabled")
+            print("Telegram notifications not enabled")
             return False
-            
+
         if not self.can_send_notification(notification_type):
             return False
-            
+
         # Update last notification time for this type
         self.last_notification_time[notification_type] = time.time()
-        
-        try:
-            chat_id = self.config["telegram"]["chat_id"]
 
-            
-            # First send the message with image if provided
+        try:
             if image_path and os.path.exists(image_path):
-                with open(image_path, 'rb') as image_file:
+                with open(image_path, "rb") as image_file:
                     await self.bot.send_photo(
-                        chat_id=chat_id, 
-                        photo=image_file, 
+                        chat_id=self.chat_id,
+                        photo=InputFile(image_file),
                         caption=message,
                     )
                 print(f"Telegram image sent: {image_path}")
             else:
                 await self.bot.send_message(
-                    chat_id=chat_id, 
+                    chat_id=self.chat_id,
                     text=message,
                 )
-                print(f"Telegram message sent without image")
-                    
+                print("Telegram message sent without image")
+
             print(f"Telegram notification sent: {notification_type}")
             return True
         except Exception as e:
-            print(f"Error sending Telegram notification: {str(e)}")
+            print(f"Error sending Telegram notification: {e}")
             return False
-    
+
     def send_notification(self, message, image_path=None, notification_type="general"):
         """
-        Non-async wrapper for send_notification_async
+        Synchronous wrapper for send_notification_async. Ensures that the event loop is active.
         """
-        # Create a new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+        if self.loop.is_closed():
+            print("Event loop is closed. Creating a new event loop.")
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         try:
-            # Run the async function in the new loop
-            result = loop.run_until_complete(
+            result = self.loop.run_until_complete(
                 self.send_notification_async(message, image_path, notification_type)
             )
             return result
-        finally:
-            # Close the loop
-            loop.close()
-    
+        except Exception as e:
+            print(f"Exception in send_notification: {e}")
+            return False
+
     def send_fire_alert(self, image_path=None):
-        """Send fire detection alert"""
+        """Send a fire detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nImmediate action is required!"
         print(f"Sending fire alert with image: {image_path}")
         return self.send_notification(message, image_path, "fire")
-    
+
     def send_smoke_alert(self, image_path=None):
-        """Send smoke detection alert"""
+        """Send a smoke detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
         print(f"Sending smoke alert with image: {image_path}")
         return self.send_notification(message, image_path, "smoke")
-    
+
     def send_person_alert(self, image_path=None):
-        """Send person detection alert"""
+        """Send a person detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"👤 PERSON DETECTED! 👤\nTimestamp: {timestamp}"
         return self.send_notification(message, image_path, "person")
-    
+
     def send_face_alert(self, image_path=None):
-        """Send face detection alert"""
+        """Send a face detection alert."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}"
         return self.send_notification(message, image_path, "face")
-    
+
     def send_test_message(self):
-        """Send a test message to verify Telegram configuration"""
+        """Send a test message to verify Telegram configuration."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}"
         return self.send_notification(message, None, "test")
 
+'''
+class TelegramService:
+    """
+    Service for sending notifications and images to Telegram.
+    """
+
+    def __init__(self, config_manager):
+        self.config_manager = config_manager
+        self.config = self.config_manager.get_config()
+        self.bot = None
+        self.last_notification_time = {}  # Track last notification time by type
+        self.setup_bot()
+
+    def reload_config(self):
+        """Reload configuration and update bot if needed."""
+        old_config = self.config
+        self.config = self.config_manager.get_config()
+
+        # If token changed, reinitialize the bot
+        if old_config["telegram"]["token"] != self.config["telegram"]["token"]:
+            self.setup_bot()
+
+    def setup_bot(self):
+        """Initialize Telegram bot with current configuration."""
+        token = self.config["telegram"].get("token")
+        enabled = self.config["telegram"].get("enabled", False)
+
+        if not enabled or not token:
+            self.bot = None
+            print("Telegram bot is disabled or token is missing.")
+            return
+
+        try:
+            self.bot = Bot(token=token)
+            print(f"Telegram bot initialized with token: {token[:5]}...")
+        except TelegramError as e:
+            print(f"Error initializing Telegram bot: {e}")
+            self.bot = None
+
+    def is_enabled(self):
+        """Check if Telegram notifications are enabled."""
+        return (
+            self.config["telegram"].get("enabled", False)
+            and self.bot is not None
+            and self.config["telegram"].get("chat_id") is not None
+        )
+
+    def can_send_notification(self, notification_type):
+        """
+        Check if a notification can be sent based on cooldown period.
+        """
+        if not self.is_enabled():
+            print("Telegram notifications not enabled.")
+            return False
+
+        current_time = time.time()
+        cooldown = self.config["telegram"].get("cooldown", 0)
+
+        last_time = self.last_notification_time.get(notification_type, 0)
+        if current_time - last_time >= cooldown:
+            return True
+
+        print(
+            f"Telegram notification on cooldown for type: {notification_type}. "
+            f"Next notification in {cooldown - (current_time - last_time):.1f} seconds."
+        )
+        return False
+
+    async def send_notification_async(self, message, image_path=None, notification_type="general"):
+        """
+        Send a notification message and optionally an image to Telegram asynchronously.
+        """
+        if not self.is_enabled():
+            print("Telegram notifications not enabled.")
+            return False
+
+        if not self.can_send_notification(notification_type):
+            return False
+
+        self.last_notification_time[notification_type] = time.time()
+        chat_id = self.config["telegram"]["chat_id"]
+
+        try:
+            if image_path and os.path.exists(image_path):
+                with open(image_path, 'rb') as image_file:
+                    await self.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=image_file,
+                        caption=message,
+                    )
+                print(f"Telegram image sent: {image_path}")
+            else:
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                )
+                print("Telegram message sent without image.")
+
+            print(f"Telegram notification sent: {notification_type}")
+            return True
+        except TelegramError as e:
+            print(f"Error sending Telegram notification: {e}")
+            return False
+
+    def send_notification(self, message, image_path=None, notification_type="general"):
+        """
+        Synchronous wrapper for send_notification_async.
+        """
+        return asyncio.run(self.send_notification_async(message, image_path, notification_type))
+
+    def send_fire_alert(self, image_path=None):
+        """Send fire detection alert."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nImmediate action is required!"
+        print(f"Sending fire alert with image: {image_path}")
+        return self.send_notification(message, image_path, "fire")
+
+    def send_smoke_alert(self, image_path=None):
+        """Send smoke detection alert."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
+        print(f"Sending smoke alert with image: {image_path}")
+        return self.send_notification(message, image_path, "smoke")
+
+    def send_person_alert(self, image_path=None):
+        """Send person detection alert."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"👤 PERSON DETECTED! 👤\nTimestamp: {timestamp}"
+        return self.send_notification(message, image_path, "person")
+
+    def send_face_alert(self, image_path=None):
+        """Send face detection alert."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}"
+        return self.send_notification(message, image_path, "face")
+
+    def send_test_message(self):
+        """Send a test message to verify Telegram configuration."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}"
+        return self.send_notification(message, None, "test")
+'''
 # Camera handling
 class Camera:
     def __init__(self, camera_index=0):
