@@ -2,8 +2,8 @@
   "detection": {
     "fire": true,
     "smoke": true,
-    "person": false,
-    "face": false
+    "person": true,
+    "face": true
   },
   "telegram": {
     "enabled": true,
