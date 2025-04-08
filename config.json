@@ -2,7 +2,7 @@
   "detection": {
     "fire": true,
     "smoke": true,
-    "person": true,
+    "motion": true,
     "face": true
   },
   "telegram": {

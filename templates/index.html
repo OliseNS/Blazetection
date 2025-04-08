@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inferno Command Center</title>
+    <title>Detection System Dashboard</title>
     <style>
         /* Main Styles - Optimized for Pi */
         :root {
@@ -230,6 +230,12 @@
             gap: 8px;
         }
 
+        /* Live Camera Feed */
+        .live-camera-feed {
+            width: 100%;
+            border-radius: var(--border-radius);
+        }
+
         .face-item {
             position: relative;
             border-radius: var(--border-radius);
@@ -334,8 +340,7 @@
 <body>
     <div class="container">
         <header>
-            <img src="/static/logo.png" alt="Inferno Logo" style="width: 100px; height: auto;">
-            <h1>Inferno Command Center</h1>
+            <h1>Detection System Dashboard</h1>
             <div id="status-indicator" class="status-normal">
                 <span id="status-icon"><i class="fas fa-check-circle"></i></span>
                 <span id="status-text">Normal</span>
@@ -343,6 +348,15 @@
         </header>
 
         <div class="main-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Live Camera Feed</h2>
+                </div>
+                <div class="card-body">
+                    <img src="/video_feed" alt="Live Camera Feed" class="live-camera-feed">
+                </div>
+            </div>
+            
             <div class="card">
                 <div class="card-header">
                     <h2>Detection Controls</h2>
@@ -362,10 +376,11 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+
                     <div class="toggle-container">
                         <label class="toggle">
-                            <span class="toggle-label"><i class="fas fa-user"></i> Person Detection</span>
-                            <input type="checkbox" id="person-toggle" checked>
+                            <span class="toggle-label"><i class="fas fa-movie"></i> Motion Detection</span>
+                            <input type="checkbox" id="motion-toggle" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -376,6 +391,7 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    
                     <div class="alarm-control">
                         <button id="stop-alarm" class="btn btn-danger">
                             <i class="fas fa-bell-slash"></i> Stop Alarm
@@ -398,11 +414,11 @@
                     </div>
                     <div class="form-group">
                         <label for="telegram-token">Bot Token</label>
-                        <input type="password" id="telegram-token" placeholder="Enter your Telegram bot token">
+                        <input type="text" id="telegram-token" placeholder="Enter your Telegram bot token">
                     </div>
                     <div class="form-group">
                         <label for="telegram-chat-id">Chat ID</label>
-                        <input type="password" id="telegram-chat-id" placeholder="Enter your Telegram chat ID">
+                        <input type="text" id="telegram-chat-id" placeholder="Enter your Telegram chat ID">
                     </div>
                     <div class="form-group">
                         <label for="telegram-cooldown">Notification Cooldown (seconds)</label>
@@ -419,6 +435,23 @@
 
             <div class="card">
                 <div class="card-header">
+                    <h2>Text-to-Speech (TTS)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="tts-text">Enter Text</label>
+                        <input type="text" id="tts-text" placeholder="Type something to speak">
+                    </div>
+                    <div class="alarm-control">
+                        <button id="tts-speak" class="btn btn-primary">
+                            <i class="fas fa-volume-up"></i> Speak
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
                     <h2>Recent Faces</h2>
                 </div>
                 <div class="card-body">
@@ -428,6 +461,19 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Detection Status</h2>
+                </div>
+                <div class="card-body">
+                    <div class="detection-status" id="motionStatus">
+                        Motion Detection: <span class="status-dot"></span>
+                        <span class="last-detection-time"></span>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -443,7 +489,7 @@
         // DOM Elements
         const fireToggle = document.getElementById('fire-toggle');
         const smokeToggle = document.getElementById('smoke-toggle');
-        const personToggle = document.getElementById('person-toggle');
+        const motionToggle = document.getElementById('motion-toggle'); // Updated ID
         const faceToggle = document.getElementById('face-toggle');
         const telegramToggle = document.getElementById('telegram-toggle');
         const telegramToken = document.getElementById('telegram-token');
@@ -459,6 +505,9 @@
         const faceModal = document.getElementById('face-modal');
         const modalImage = document.getElementById('modal-image');
         const closeModal = document.querySelector('.close-modal');
+        const ttsSpeakBtn = document.getElementById('tts-speak');
+        const ttsTextInput = document.getElementById('tts-text');
+        const motionStatus = document.getElementById('motionStatus');
 
         // Configuration and Status
         let config = {};
@@ -496,10 +545,9 @@
 
         // Update UI based on configuration
         function updateConfigUI() {
-            // Detection toggles
             fireToggle.checked = config.detection?.fire ?? true;
             smokeToggle.checked = config.detection?.smoke ?? true;
-            personToggle.checked = config.detection?.person ?? true;
+            motionToggle.checked = config.detection?.motion ?? true;
             faceToggle.checked = config.detection?.face ?? true;
             
             // Telegram settings
@@ -540,6 +588,10 @@
                 case 'smoke pre-alert':
                     statusIndicator.classList.add('status-smoke');
                     statusIcon.innerHTML = '<i class="fas fa-smog"></i>';
+                    break;
+                case 'motion detected':
+                    motionStatus.querySelector('.status-dot').style.backgroundColor = 'green';
+                    motionStatus.querySelector('.last-detection-time').textContent = new Date().toLocaleTimeString();
                     break;
                 case 'person detected':
                     statusIndicator.classList.add('status-person');
@@ -611,8 +663,11 @@
                 updateDetectionConfig('smoke', smokeToggle.checked);
             });
             
-            personToggle.addEventListener('change', () => {
-                updateDetectionConfig('person', personToggle.checked);
+            motionToggle.addEventListener('change', () => {
+                updateDetectionConfig('motion', motionToggle.checked);
+                // Update the status dot color based on toggle state
+                const statusDot = document.querySelector('#motionStatus .status-dot');
+                statusDot.style.backgroundColor = motionToggle.checked ? 'gray' : 'red';
             });
             
             faceToggle.addEventListener('change', () => {
@@ -644,6 +699,36 @@
                     closeModalFunc();
                 }
             });
+
+            // TTS Button Event Listener
+            ttsSpeakBtn.addEventListener('click', () => {
+                const text = ttsTextInput.value;
+                if (text.trim() === '') {
+                    alert('Please enter some text.');
+                    return;
+                }
+
+                // Send the text to the server for TTS
+                fetch('/api/tts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Text is being spoken on the Raspberry Pi.');
+                    } else {
+                        alert('Failed to process TTS: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error with TTS:', error);
+                    alert('Error with TTS. Please try again.');
+                });
+            });
         }
 
         // Update detection configuration
@@ -669,7 +754,7 @@
                     switch(type) {
                         case 'fire': fireToggle.checked = !enabled; break;
                         case 'smoke': smokeToggle.checked = !enabled; break;
-                        case 'person': personToggle.checked = !enabled; break;
+                        case 'motion': motionToggle.checked = !enabled; break;
                         case 'face': faceToggle.checked = !enabled; break;
                     }
                 }
@@ -680,7 +765,7 @@
                 switch(type) {
                     case 'fire': fireToggle.checked = !enabled; break;
                     case 'smoke': smokeToggle.checked = !enabled; break;
-                    case 'person': personToggle.checked = !enabled; break;
+                    case 'motion': motionToggle.checked = !enabled; break;
                     case 'face': faceToggle.checked = !enabled; break;
                 }
             });

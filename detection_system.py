@@ -9,15 +9,14 @@ import mediapipe as mp
 from scipy.spatial.distance import euclidean
 from datetime import datetime
 import pygame
-import os
-import time
+import telegram
 import asyncio
-from datetime import datetime
-from telegram import Bot, InputFile
-from telegram.ext import Application, ApplicationBuilder
-from gpiozero import DigitalInputDevice 
+import telegram 
 import flask
 from flask import Flask, render_template, request, jsonify, send_from_directory
+import pyaudio
+import numpy as np
+import struct
 
 # ANSI color codes for terminal output
 class Colors:
@@ -50,7 +49,7 @@ class ConfigManager:
                     "detection": {
                         "fire": True,
                         "smoke": True,
-                        "person": True,
+                        "motion": True, 
                         "face": True
                     },
                     "telegram": {
@@ -61,10 +60,10 @@ class ConfigManager:
                     },
                     "system": {
                         "camera_index": 0,
-                        "detection_interval": 0.3,
-                        "face_save_interval": 0.6,
+                        "detection_interval": 0.5,
+                        "face_save_interval": 1.0,
                         "alarm_threshold": 3,
-                        "max_saved_faces": 5
+                        "max_saved_faces": 50
                     }
                 }
                 self._save_config(default_config)
@@ -128,171 +127,161 @@ class ConfigManager:
         except:
             return False
 
+# Telegram integration
 class TelegramService:
     """
-    Service for sending notifications and images to Telegram.
+    Service for sending notifications and images to Telegram
     """
-
     def __init__(self, config_manager):
         self.config_manager = config_manager
-        self.config = self.config_manager.get_config()
-        self.token = self.config["telegram"]["token"]
-        self.chat_id = self.config["telegram"]["chat_id"]
-        self.cooldown = self.config["telegram"]["cooldown"]
-        self.last_notification_time = {}  # Track last notification time by type
-        self.application = None
+        self.config = config_manager.get_config()
         self.bot = None
-        self.loop = asyncio.get_event_loop()
+        self.last_notification_time = {}  # Track last notification time by type
         self.setup_bot()
-
+        
     def reload_config(self):
-        """Reload configuration and update bot if needed."""
+        """Reload configuration and update bot if needed"""
         old_config = self.config
         self.config = self.config_manager.get_config()
+        
+        # If token changed, reinitialize the bot
         if old_config["telegram"]["token"] != self.config["telegram"]["token"]:
-            self.token = self.config["telegram"]["token"]
-            self.chat_id = self.config["telegram"]["chat_id"]
-            self.cooldown = self.config["telegram"]["cooldown"]
             self.setup_bot()
-
+    
     def setup_bot(self):
-        """Initialize Telegram bot with current configuration."""
-        if not self.config["telegram"]["enabled"] or not self.token:
+        """Initialize Telegram bot with current configuration"""
+        if not self.config["telegram"]["enabled"] or not self.config["telegram"]["token"]:
             self.bot = None
-            self.application = None
             return
-
+            
         try:
-            self.application = (
-                ApplicationBuilder()
-                .token(self.token)
-                .concurrent_updates(True)  # Enable concurrent handling of updates
-                .build()
-            )
-            self.bot = self.application.bot
-            print(f"Telegram bot initialized with token: {self.token[:5]}...")
+            self.bot = telegram.Bot(token=self.config["telegram"]["token"])
+            print(f"Telegram bot initialized with token: {self.config['telegram']['token'][:5]}...")
         except Exception as e:
-            print(f"Error initializing Telegram bot: {e}")
+            print(f"Error initializing Telegram bot: {str(e)}")
             self.bot = None
-            self.application = None
-
+    
     def is_enabled(self):
-        """Check if Telegram notifications are enabled."""
-        return (
-            self.config["telegram"]["enabled"]
-            and self.bot is not None
-            and self.chat_id is not None
-        )
-
+        """Check if Telegram notifications are enabled"""
+        return (self.config["telegram"]["enabled"] and 
+                self.bot is not None and 
+                self.config["telegram"]["chat_id"])
+    
     def can_send_notification(self, notification_type):
         """
-        Check if a notification can be sent based on a cooldown period.
+        Check if a notification can be sent based on cooldown period
         """
         if not self.is_enabled():
-            print("Telegram notifications not enabled")
+            print(f"Telegram notifications not enabled")
             return False
-
+            
         current_time = time.time()
-        if (notification_type not in self.last_notification_time or 
-                (current_time - self.last_notification_time[notification_type]) >= self.cooldown):
+        cooldown = self.config["telegram"]["cooldown"]
+        
+        # If this type hasn't been sent before or cooldown has passed
+        if (notification_type not in self.last_notification_time or
+                current_time - self.last_notification_time[notification_type] >= cooldown):
             return True
-
-        remaining = self.cooldown - (current_time - self.last_notification_time[notification_type])
-        print(f"Telegram notification on cooldown for type: {notification_type}. Next notification in {remaining:.1f} seconds")
+            
+        print(f"Telegram notification on cooldown for type: {notification_type}. " +
+              f"Next notification in {cooldown - (current_time - self.last_notification_time[notification_type]):.1f} seconds")
         return False
-
+    
     async def send_notification_async(self, message, image_path=None, notification_type="general"):
         """
-        Asynchronously send a notification message (and optionally an image) to Telegram.
+        Send a notification message and optionally an image to Telegram using asyncio
         """
         if not self.is_enabled():
-            print("Telegram notifications not enabled")
+            print(f"Telegram notifications not enabled")
             return False
-
+            
         if not self.can_send_notification(notification_type):
             return False
-
+            
         # Update last notification time for this type
         self.last_notification_time[notification_type] = time.time()
-
+        
         try:
+            chat_id = self.config["telegram"]["chat_id"]
+
+            
+            # First send the message with image if provided
             if image_path and os.path.exists(image_path):
-                with open(image_path, "rb") as image_file:
+                with open(image_path, 'rb') as image_file:
                     await self.bot.send_photo(
-                        chat_id=self.chat_id,
-                        photo=InputFile(image_file),
+                        chat_id=chat_id, 
+                        photo=image_file, 
                         caption=message,
                     )
                 print(f"Telegram image sent: {image_path}")
             else:
                 await self.bot.send_message(
-                    chat_id=self.chat_id,
+                    chat_id=chat_id, 
                     text=message,
                 )
-                print("Telegram message sent without image")
-
+                print(f"Telegram message sent without image")
+                    
             print(f"Telegram notification sent: {notification_type}")
             return True
         except Exception as e:
-            print(f"Error sending Telegram notification: {e}")
+            print(f"Error sending Telegram notification: {str(e)}")
             return False
-
+    
     def send_notification(self, message, image_path=None, notification_type="general"):
         """
-        Synchronous wrapper for send_notification_async. Ensures that the event loop is active.
+        Non-async wrapper for send_notification_async
         """
-        if self.loop.is_closed():
-            print("Event loop is closed. Creating a new event loop.")
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         try:
-            result = self.loop.run_until_complete(
+            # Run the async function in the new loop
+            result = loop.run_until_complete(
                 self.send_notification_async(message, image_path, notification_type)
             )
             return result
-        except Exception as e:
-            print(f"Exception in send_notification: {e}")
-            return False
-
+        finally:
+            # Close the loop
+            loop.close()
+    
     def send_fire_alert(self, image_path=None):
-        """Send a fire detection alert."""
+        """Send fire detection alert"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nEvacuate the area immediately and contact emergency services."
+        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nImmediate action is required!"
         print(f"Sending fire alert with image: {image_path}")
         return self.send_notification(message, image_path, "fire")
-
+    
     def send_smoke_alert(self, image_path=None):
-        """Send a smoke detection alert."""
+        """Send smoke detection alert"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!.\nYou can configure settings here http://127.0.0.1:8080/"
+        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
         print(f"Sending smoke alert with image: {image_path}")
         return self.send_notification(message, image_path, "smoke")
-
-    def send_person_alert(self, image_path=None):
-        """Send a person detection alert."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👤 PERSON DETECTED in monitored area 👤\nTimestamp: {timestamp} \nYou can configure settings here http://127.0.0.1:8080/"
-        return self.send_notification(message, image_path, "person")
-
-    def send_face_alert(self, image_path=None):
-        """Send a face detection alert."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}\nYou can configure settings here http://127.0.0.1:8080/"
-        return self.send_notification(message, image_path, "face")
-
-    def send_test_message(self):
-        """Send a test message to verify Telegram configuration."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}\nYou can configure settings here http://127.0.0.1:8080/"
-        return self.send_notification(message, None, "test")
-
-    def send_welcome_message(self):
-        """Send a test message to verify Telegram configuration."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"Your Inferno System is now on \nYour Telegram integration is working correctly!\nTimestamp: {timestamp}\nYou can configure settings here http://127.0.0.1:8080/"
-        return self.send_notification(message, None, "test")
     
-
+    def send_person_alert(self, image_path=None):
+        """Send person detection alert"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"👤 PERSON DETECTED! 👤\nTimestamp: {timestamp}"
+        return self.send_notification(message, image_path, "person")
+    
+    def send_face_alert(self, image_path=None):
+        """Send face detection alert"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}"
+        return self.send_notification(message, image_path, "face")
+    
+    def send_motion_alert(self, image_path=None):
+        """Send motion detection alert"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"🔄 MOTION DETECTED! \nTimestamp: {timestamp}"
+        return self.send_notification(message, image_path, "motion")
+    
+    def send_test_message(self):
+        """Send a test message to verify Telegram configuration"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}"
+        return self.send_notification(message, None, "test")
 
 # Camera handling
 class Camera:
@@ -303,10 +292,10 @@ class Camera:
             raise IOError(f"{Colors.RED}Error accessing webcam{Colors.RESET}")
         
         # Set camera properties for better performance on Pi
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        self.cap.set(cv2.CAP_PROP_FPS, 10)  # Lower FPS for Pi
+        self.cap.set(cv2.CAP_PROP_FPS, 50)  # Lower FPS for Pi
     
     def read_frame(self):
         """Read a frame from the camera"""
@@ -327,26 +316,26 @@ class YOLODetector:
     def detect(self, frame):
         """Detect objects in frame using YOLO"""
         # Use 320x320 image size for better performance on Pi
-        results = list(self.model.predict(frame, imgsz=224, conf=self.CONF_THRESHOLD, iou=self.IOU_THRESHOLD, stream=True))
-        if results:  # Ensure the list is not empty
-            return results[0].boxes
-        return None  # Return None if no results
+        results = self.model.predict(frame, imgsz=224, conf=self.CONF_THRESHOLD, iou=self.IOU_THRESHOLD)
+        return results[0].boxes
 
 # Pose detector
 class PoseDetector:
-    def __init__(self, min_detection_confidence=0.5, min_tracking_confidence=0.5):
+    def __init__(self, min_detection_confidence=0.8, min_tracking_confidence=0.8):
         """Initialize MediaPipe pose detector"""
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             min_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence,
-            model_complexity=0  
+            model_complexity=0  # Use lightweight model for Pi
         )
     
     def detect(self, frame_rgb):
         """Detect poses in frame"""
+        # Provide image dimensions explicitly
+        height, width, _ = frame_rgb.shape
         results = self.pose.process(frame_rgb)
-        return results.pose_landmarks is not None
+        return results
 
 # Face detector
 class FaceDetector:
@@ -355,7 +344,7 @@ class FaceDetector:
         self.mp_face = mp.solutions.face_detection
         self.face_detection = self.mp_face.FaceDetection(
             min_detection_confidence=min_detection_confidence,
-            model_selection=0  
+            model_selection=0  # Use lightweight model for Pi
         )
     
     def detect(self, frame_rgb):
@@ -363,23 +352,108 @@ class FaceDetector:
         results = self.face_detection.process(frame_rgb)
         return results.detections if results.detections else []
 
+# Motion detector
+class MotionDetector:
+    def __init__(self):
+        """Initialize motion detector"""
+        self.fgbg = cv2.createBackgroundSubtractorMOG2()
+        self.min_area = 1000  # Minimum area to trigger motion detection
+        
+    def detect(self, frame):
+        """Detect motion in frame"""
+        # Apply background subtraction
+        fgmask = self.fgbg.apply(frame)
+        
+        # Apply thresholding to remove noise
+        thresh = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY)[1]
+        
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Check for significant motion
+        for contour in contours:
+            if cv2.contourArea(contour) > self.min_area:
+                return True
+                
+        return False
+
+class SineWaveAlarm:
+    def __init__(self):
+        self.initialize_audio()
+
+    def initialize_audio(self):
+        """Initialize PyAudio instance and check for available devices"""
+        try:
+            self.p = pyaudio.PyAudio()
+            # Check if we have any output devices
+            device_count = self.p.get_device_count()
+            if device_count == 0:
+                raise Exception("No audio devices found")
+            
+            # Find a valid output device
+            self.device_index = None
+            for i in range(device_count):
+                device_info = self.p.get_device_info_by_index(i)
+                if device_info['maxOutputChannels'] > 0:
+                    self.device_index = i
+                    break
+            
+            if self.device_index is None:
+                raise Exception("No valid output device found")
+                
+            self.sample_rate = 44100
+            self.duration = 0.45
+            self.low_freq = 800
+            self.high_freq = 1600
+            self.amplitude = 0.5
+        except Exception as e:
+            print(f"Error initializing audio: {str(e)}")
+            self.p = None
+
+    def generate_tone(self, frequency, duration=None):
+        if duration is None:
+            duration = self.duration
+        t = np.linspace(0, duration, int(self.sample_rate * duration), False)
+        wave = np.sin(2 * np.pi * frequency * t) * self.amplitude
+        return (wave * 32767).astype(np.int16).tobytes()
+
+    def fire_alarm_siren(self, duration=0.5):
+        try:
+            if self.p is None:
+                self.initialize_audio()
+            if self.p is None:  # If still None after reinitialization
+                return
+
+            stream = self.p.open(format=pyaudio.paInt16,
+                               channels=1,
+                               rate=self.sample_rate,
+                               output=True,
+                               output_device_index=self.device_index)
+            
+            tone_low = self.generate_tone(self.low_freq, duration)
+            tone_high = self.generate_tone(self.high_freq, duration)
+            stream.write(tone_high)
+            stream.write(tone_low)
+            stream.stop_stream()
+            stream.close()
+        except Exception as e:
+            print(f"Error playing alarm: {str(e)}")
+            # Cleanup and reinitialize on error
+            self.cleanup()
+            self.initialize_audio()
+
+    def cleanup(self):
+        """Safely cleanup PyAudio resources"""
+        try:
+            if hasattr(self, 'p') and self.p is not None:
+                self.p.terminate()
+                self.p = None
+        except Exception as e:
+            print(f"Error during audio cleanup: {str(e)}")
+
 # Main detection system
 class DetectionSystem:
     def __init__(self, config_path="config.json"):
-        # Initialize pygame for alarm sounds
-        pygame.mixer.init()
-        self.running = False
-        self.smoke_sensor_thread = None
-        
-        # Try to initialize MQ2 sensor on GPIO17
-        try:
-            self.mq2 = DigitalInputDevice(17)
-            self.smoke_sensor_thread = threading.Thread(target=self.monitor_smoke_sensor, daemon=True)
-            self.smoke_sensor_thread.start()
-            print(f"{Colors.GREEN}MQ2 sensor initialized on GPIO17{Colors.RESET}")
-        except Exception as e:
-            self.mq2 = None
-            print(f"{Colors.YELLOW}MQ2 sensor not found or failed to initialize: {str(e)}{Colors.RESET}")
         # Clean up old face images on startup
         self.cleanup_old_images()
         
@@ -395,7 +469,7 @@ class DetectionSystem:
         self.config_manager.register_callback(self.on_config_update)
         
         # Initialization flags
-        
+        self.running = False
         self.face_count = 0
         
         # Initialize camera
@@ -404,7 +478,7 @@ class DetectionSystem:
         
         # Initialize detectors
         self.object_detector = YOLODetector("model_ncnn_model")
-        self.pose_detector = PoseDetector()
+        self.motion_detector = MotionDetector()
         self.face_detector = FaceDetector()
         
         # Initialize face tracking
@@ -428,6 +502,9 @@ class DetectionSystem:
         self.alarm_playing = False
         self.alarm_thread = None
         
+        # Replace pygame.mixer.init() with SineWaveAlarm
+        self.alarm = SineWaveAlarm()
+        
         # Initialize Telegram service
         self.telegram_service = TelegramService(self.config_manager)
         
@@ -436,32 +513,32 @@ class DetectionSystem:
         self.last_detections = {
             "fire": None,
             "smoke": None,
-            "person": None,
+            "motion": None,
             "face": None
         }
         self.recent_faces = []
-        self.max_recent_faces = 5
+        self.max_recent_faces = 10
         
         # Detection tracking
         self.no_detection_count = 0
-        self.NO_DETECTION_THRESHOLD = 2  # Number of consecutive no-detection frames to reset to Normal
+        self.NO_DETECTION_THRESHOLD = 3  # Number of consecutive no-detection frames to reset to Normal
+
+        # Store the latest frame for sharing
+        self.latest_frame = None
         
     def cleanup_old_images(self):
-        """Clean up old face and detection images on startup"""
         try:
-            # Remove and recreate faces directory
-            if os.path.exists("faces"):
-                shutil.rmtree("faces")
-            os.makedirs("faces", exist_ok=True)
+            # Remove all files in faces and detections directories
+            for folder in ["faces", "detections"]:
+                if os.path.exists(folder):
+                    for file in os.listdir(folder):
+                        file_path = os.path.join(folder, file)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
             
-            # Remove and recreate detections directory
-            if os.path.exists("detections"):
-                shutil.rmtree("detections")
-            os.makedirs("detections", exist_ok=True)
-            
-            print(f"{Colors.GREEN}Cleaned up old face and detection images{Colors.RESET}")
+            print(f"{Colors.GREEN}Discarded old face and detection images{Colors.RESET}")
         except Exception as e:
-            print(f"{Colors.RED}Error cleaning up old images: {str(e)}{Colors.RESET}")
+            print(f"{Colors.RED}Error discarding old images: {str(e)}{Colors.RESET}")
             
     def on_config_update(self, new_config):
         """Handle configuration updates"""
@@ -480,19 +557,6 @@ class DetectionSystem:
         self.running = True
         print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
         
-         # Start the smoke sensor thread here
-        self.running = True
-        print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
-        
-        # Start the smoke sensor thread here
-        if self.mq2 and (self.smoke_sensor_thread is None or not self.smoke_sensor_thread.is_alive()):
-            self.smoke_sensor_thread = threading.Thread(target=self.monitor_smoke_sensor, daemon=True)
-            self.smoke_sensor_thread.start()
-            
-        if self.telegram_service.is_enabled():
-            print(f"{Colors.GREEN}Sending system start notification via Telegram...{Colors.RESET}")
-            self.telegram_service.send_welcome_message()
-
         try:
             while self.running:
                 success, frame = self.camera.read_frame()
@@ -501,12 +565,15 @@ class DetectionSystem:
                     time.sleep(1)  # Wait a bit before trying again
                     continue
                 
+                # Store the latest frame for sharing
+                self.latest_frame = frame.copy()
+
                 current_time = time.time()
                 process_frame = current_time - self.last_detection_time >= self.DETECTION_INTERVAL
                 
                 if process_frame:
                     self.last_detection_time = current_time
-                    # No need to resize
+                    # No need to resize, we're already capturing at 320x240
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     
                     # Track if any detection happened in this frame
@@ -518,9 +585,9 @@ class DetectionSystem:
                         if fire_detected or smoke_detected:
                             any_detection = True
                     
-                    if self.config["detection"]["person"]:
-                        person_detected = self.process_pose_detection(frame_rgb)
-                        if person_detected:
+                    if self.config["detection"]["motion"]:
+                        motion_detected = self.process_motion_detection(frame)
+                        if motion_detected:
                             any_detection = True
                     
                     # Process face detection on a different interval
@@ -542,7 +609,7 @@ class DetectionSystem:
                                 self.last_detections = {
                                     "fire": None,
                                     "smoke": None,
-                                    "person": None,
+                                    "motion": None,
                                     "face": None
                                 }
                     else:
@@ -558,40 +625,40 @@ class DetectionSystem:
             self.shutdown()
     
     def process_object_detection(self, frame):
-        """Process frame with YOLO object detector"""
+        """Process frame with YOLO object detector with enhanced styled bounding boxes and alarm state"""
         detected_objects = self.object_detector.detect(frame)
-
+        
         fire_detected = False
         smoke_detected = False
 
         if detected_objects and len(detected_objects) > 0:
             classes = detected_objects.cls.tolist()
             confidences = detected_objects.conf.tolist()
-
+            
             print(f"{Colors.GREEN}[{datetime.now().strftime('%H:%M:%S')}] YOLO detected {len(classes)} object(s):{Colors.RESET}")
-
+            
             # Create a copy of the frame for saving detections
             detection_frame = frame.copy()
-
+            
             for i, (cls, conf) in enumerate(zip(classes, confidences)):
                 label = ""
                 box_color = (0, 255, 0)  # Default color
 
                 if cls == 0 and self.config["detection"]["fire"]:
                     label = f"FIRE Detected"
-                    box_color = (0, 0, 255)
+                    box_color = (0, 0, 255)  
                     fire_detected = True
                 elif cls == 1 and self.config["detection"]["smoke"]:
                     label = f"SMOKE Detected"
                     box_color = (0, 0, 255)
                     smoke_detected = True
-
+                
                 print(f"  - {label}")
 
                 box = detected_objects[i]
                 x1, y1, x2, y2 = [int(val) for val in box.xyxy[0].tolist()]
 
-                # Draw bounding box
+                # Draw simple bounding box (optimized for Pi)
                 cv2.rectangle(detection_frame, (x1, y1), (x2, y2), box_color, 2)
                 cv2.putText(detection_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 1)
 
@@ -603,33 +670,37 @@ class DetectionSystem:
                 print(f"  {Colors.CYAN}Saved detection image: {detection_filename}{Colors.RESET}")
 
                 # Update alarm state with the saved image path
-                self.update_alarm_state(fire_detected, smoke_detected, detection_filename, confirmed_by_mq2=False)
+                self.update_alarm_state(fire_detected, smoke_detected, detection_filename)
             else:
                 # No fire or smoke detected, update alarm state without image
-                self.update_alarm_state(False, False, confirmed_by_mq2=False)
+                self.update_alarm_state(False, False)
         else:
             # No objects detected, update alarm state
-            self.update_alarm_state(False, False, confirmed_by_mq2=False)
-
+            self.update_alarm_state(False, False)
+            
         return fire_detected, smoke_detected
     
-    def process_pose_detection(self, frame_rgb):
-        """Process frame with MediaPipe pose detector"""
-        if not self.config["detection"]["person"]:
+    def process_motion_detection(self, frame):
+        """Process frame with motion detector"""
+        if not self.config["detection"]["motion"]:
             return False
-            
-        person_detected = self.pose_detector.detect(frame_rgb)
         
-        if person_detected:
-            print(f"{Colors.BLUE}[{datetime.now().strftime('%H:%M:%S')}] Person detected by MediaPipe{Colors.RESET}")
+        motion_detected = self.motion_detector.detect(frame)
+        
+        if motion_detected:
+            print(f"{Colors.BLUE}[{datetime.now().strftime('%H:%M:%S')}] Motion detected{Colors.RESET}")
             
             # Update status
-            self.system_status = "Person Detected"
+            self.system_status = "Motion Detected"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.last_detections["person"] = timestamp
+            self.last_detections["motion"] = timestamp
+            
+            # Save motion detection image
+            detection_filename = f"detections/motion_{timestamp}.jpg"
+            cv2.imwrite(detection_filename, frame)
             
             # Send Telegram notification if enabled
-            self.telegram_service.send_person_alert()
+            self.telegram_service.send_motion_alert(detection_filename)
             
             return True
         return False
@@ -747,143 +818,83 @@ class DetectionSystem:
         
         return face_roi, face_center
     
-    def monitor_smoke_sensor(self):
-        """Monitor the MQ2 sensor for smoke detection with debounce"""
-        smoke_detected_count = 0
-        NO_SMOKE_THRESHOLD = 1  # Consecutive readings to confirm smoke
-
-        while self.running:
-            try:
-                # Detect gas presence (LOW signal indicates gas)
-                if self.mq2.value == 0:
-                    smoke_detected_count += 1
-                    print(f"{Colors.YELLOW}Potential smoke detected. Count: {smoke_detected_count}{Colors.RESET}")
-
-                    if smoke_detected_count >= NO_SMOKE_THRESHOLD:
-                        print(f"{Colors.RED}Confirmed gas detection by MQ2 sensor! Triggering alarm...{Colors.RESET}")
-                        self.update_alarm_state(fire=False, smoke=True, confirmed_by_mq2=True)
-
-                        # Send smoke alert via Telegram
-                        if self.telegram_service.is_enabled():
-                            print(f"{Colors.GREEN}Sending smoke alert via Telegram...{Colors.RESET}")
-                            self.telegram_service.send_smoke_alert()
-                else:
-                    smoke_detected_count = max(0, smoke_detected_count - 1)
-                    print(f"{Colors.GREEN}No gas detected by MQ2 sensor.{Colors.RESET}")
-
-                # Longer delay between readings to reduce CPU usage
-                time.sleep(2)
-            except Exception as e:
-                print(f"{Colors.RED}Error monitoring MQ2 sensor: {str(e)}{Colors.RESET}")
-                time.sleep(5)  # Longer wait on error to prevent rapid error loops
-
-    def update_alarm_state(self, fire, smoke, image_path=None, confirmed_by_mq2=False):
+    def update_alarm_state(self, fire, smoke, image_path=None):
         """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
         if fire and self.config["detection"]["fire"]:
             self.fire_persistence_count += 1
+            if self.fire_persistence_count == self.ALARM_THRESHOLD:
+                self.system_status = "FIRE DETECTED!"
+                self.last_detections["fire"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.telegram_service.send_fire_alert(image_path)
+                self.play_alarm_sound()
         else:
-            self.fire_persistence_count = max(0, self.fire_persistence_count - 1)  # Gradually decrease
+            self.fire_persistence_count = max(0, self.fire_persistence_count - 1)
 
         if smoke and self.config["detection"]["smoke"]:
             self.smoke_persistence_count += 1
+            if self.smoke_persistence_count == self.ALARM_THRESHOLD:
+                self.system_status = "SMOKE DETECTED!"
+                self.last_detections["smoke"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.telegram_service.send_smoke_alert(image_path)
+                self.play_alarm_sound()
         else:
-            self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)  # Gradually decrease
+            self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)
 
-        fire_persist = self.fire_persistence_count >= self.ALARM_THRESHOLD
-        smoke_persist = self.smoke_persistence_count >= self.ALARM_THRESHOLD
+        # Stop alarm if no fire or smoke is being detected
+        if (self.fire_persistence_count < self.ALARM_THRESHOLD and 
+            self.smoke_persistence_count < self.ALARM_THRESHOLD and 
+            self.alarm_playing):
+            self.stop_alarm()
 
-        # Improved alarm state management
-        if (fire_persist or smoke_persist) and not self.alarm_triggered:
-            alarm_type = ""
-            if fire_persist and smoke_persist:
-                alarm_type = "FIRE & SMOKE"
-                self.system_status = "Fire & Smoke Detected"
-            elif fire_persist:
-                alarm_type = "FIRE"
-                self.system_status = "Fire Detected"
-            else:
-                alarm_type = "SMOKE"
-                self.system_status = "Smoke Detected"
-
-            mq2_status = "Yes" if confirmed_by_mq2 else "No"
-            print(f"{Colors.BOLD}{Colors.RED}🔥🔥 ALARM STATE: PERSISTENT {alarm_type} DETECTED! 🔥🔥{Colors.RESET}")
-            print(f"{Colors.YELLOW}Confirmed by MQ2: {mq2_status}{Colors.RESET}")
-            self.alarm_triggered = True
-            self.play_alarm_sound()  # Start alarm
-
-            # Update detection timestamps
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            if fire_persist:
-                self.last_detections["fire"] = timestamp
-            if smoke_persist:
-                self.last_detections["smoke"] = timestamp
-
-            # Send Telegram notification with the image
-            if fire_persist:
-                print(f"Sending fire alert with image: {image_path}")
-                self.telegram_service.send_fire_alert(image_path)
-            elif smoke_persist:
-                print(f"Sending smoke alert with image: {image_path}")
-
-        elif not fire_persist and not smoke_persist and self.alarm_triggered:
-            print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire or Smoke detected. Resetting alarm...{Colors.RESET}")
-            self.stop_alarm()  # Stop the alarm immediately
-            self.alarm_triggered = False
-            self.system_status = "Normal"
-
-     
     def play_alarm_sound(self):
-        """Play alarm sound in a thread-safe manner"""
+        """Play alarm sound in a thread-safe manner with short beep cycles"""
         if self.alarm_playing:
             return  # Already playing
 
+        self.alarm_playing = True
+
         def alarm_loop():
             try:
-                time.sleep(0.5)  # Add delay to allow buffer to load
-                pygame.mixer.music.load("507490__elanhickler__archi_scifi_alarm_danger_04.wav")
-                pygame.mixer.music.play(-1)  # Loop indefinitely
-                self.alarm_playing = True
-
+                # Play a 0.5-second beep repeatedly until the alarm is stopped
                 while self.alarm_playing and self.running:
-                    time.sleep(0.5)
-
-                pygame.mixer.music.stop()
+                    try:
+                        self.alarm.fire_alarm_siren(duration=0.5)
+                        time.sleep(0.05)  # Small delay between beeps
+                    except Exception as e:
+                        print(f"Error in alarm loop: {str(e)}")
+                        time.sleep(1)  # Longer delay on error before retrying
             except Exception as e:
-                print(f"{Colors.RED}Error playing alarm: {str(e)}{Colors.RESET}")
+                print(f"Error in alarm thread: {str(e)}")
             finally:
                 self.alarm_playing = False
+                self.alarm.cleanup()
 
-        self.stop_alarm()  # Ensure no duplicate alarm sounds
+        if self.alarm_thread and self.alarm_thread.is_alive():
+            self.alarm_thread.join(timeout=1)
+        
         self.alarm_thread = threading.Thread(target=alarm_loop, daemon=True)
         self.alarm_thread.start()
 
-    
     def stop_alarm(self):
         """Safely stop the alarm"""
         self.alarm_playing = False
-        if pygame.mixer.get_init():
-            try:
-                pygame.mixer.music.stop()
-            except:
-                pass  
-        
-        # Wait for alarm thread to terminate if it exists
+        # Removed self.alarm.cleanup() here to avoid terminating audio resources while still in use
         if self.alarm_thread and self.alarm_thread.is_alive():
-            time.sleep(0.5)
+            self.alarm_thread.join(timeout=1)
             
-        # Reset status to Normal when alarm is manually stopped
         self.system_status = "Normal"
         self.alarm_triggered = False
         self.pre_alarm_logged = False
         self.fire_persistence_count = 0
         self.smoke_persistence_count = 0
-    
+
     def shutdown(self):
         """Clean shutdown of the system"""
         self.running = False
         self.camera.release()
-        # Make sure to stop any playing alarm
+        # Make sure to stop any playing alarm and clean up resources
         self.stop_alarm()
+        self.alarm.cleanup()
         
         print(f"{Colors.BOLD}{Colors.CYAN}Session summary:{Colors.RESET}")
         print(f"- Faces detected and saved: {Colors.MAGENTA}{self.face_count}{Colors.RESET}")
@@ -905,6 +916,10 @@ class DetectionSystem:
     def test_telegram(self):
         """Send a test message to verify Telegram configuration"""
         return self.telegram_service.send_test_message()
+
+    def get_latest_frame(self):
+        """Get the latest frame captured by the camera"""
+        return self.latest_frame
 
 # Create a global detection system instance
 detection_system = None
@@ -929,10 +944,6 @@ def start_detection_system():
 
 # Main function
 if __name__ == "__main__":
-    # Initialize pygame for alarm sounds
-    pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-
-    
     # Create output directories
     os.makedirs("faces", exist_ok=True)
     os.makedirs("detections", exist_ok=True)

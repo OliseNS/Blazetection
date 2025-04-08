@@ -3,6 +3,7 @@ import os
 import threading
 import time
 from datetime import datetime
+import pyttsx3
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -14,6 +15,11 @@ app = Flask(__name__,
 
 # Initialize detection system
 detection_system = init_detection_system()
+
+# Initialize pyttsx3 engine with custom settings
+tts_engine = pyttsx3.init()
+tts_engine.setProperty('rate', 150)
+tts_engine.setProperty('volume', 0.9)
 
 # Start detection system in a separate thread
 detection_thread = None
@@ -74,6 +80,39 @@ def test_telegram():
         success = detection_system.test_telegram()
         return jsonify({"success": success})
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts', methods=['POST'])
+def text_to_speech():
+    """Convert text to speech using pyttsx3"""
+    try:
+        data = request.json
+        text = data.get('text', '')
+        
+        if not text:
+            return jsonify({"success": False, "error": "No text provided"})
+        
+        # Create a new engine instance for each request
+        local_engine = pyttsx3.init()
+        local_engine.setProperty('rate', 150)
+        local_engine.setProperty('volume', 0.9)
+        
+        try:
+            # Speak the text with the local engine
+            local_engine.say(text)
+            local_engine.runAndWait()
+        finally:
+            # Make sure to properly clean up the engine
+            try:
+                local_engine.endLoop()
+            except:
+                pass
+            local_engine.stop()
+            del local_engine
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"TTS Error: {str(e)}")  # Log the error
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/faces/<path:filename>')
