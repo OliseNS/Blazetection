@@ -1,46 +1,47 @@
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
-import cv2
-import time
 import threading
+import time
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 import pyttsx3
 
-# Import the detection system functions
+# Import the detection system
 from detection_system import init_detection_system, start_detection_system
 
 # Initialize Flask app
-app = Flask(__name__, static_folder='static', template_folder='templates')
+app = Flask(__name__, 
+            static_folder='static',
+            template_folder='templates')
 
 # Initialize detection system
 detection_system = init_detection_system()
 
 # Initialize pyttsx3 engine with custom settings
 tts_engine = pyttsx3.init()
-tts_engine.setProperty('rate', 130)
-tts_engine.setProperty('volume', 0.7)
+tts_engine.setProperty('rate', 150)
+tts_engine.setProperty('volume', 0.9)
 
-# Global variables for detection and streaming
+# Start detection system in a separate thread
 detection_thread = None
 
 @app.route('/')
 def index():
-    """Render the main dashboard page."""
+    """Render the main dashboard page"""
     return render_template('index.html')
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
-    """Get current configuration."""
-    config = detection_system.config_manager.get_config()
-    return jsonify(config)
+    """Get current configuration"""
+    return jsonify(detection_system.config_manager.get_config())
 
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    """Update configuration."""
+    """Update configuration"""
     try:
         data = request.json
         section = data.get('section')
         values = data.get('values')
+        
         if section and values:
             success = detection_system.config_manager.update_section(section, values)
             return jsonify({"success": success})
@@ -51,20 +52,22 @@ def update_config():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    """Get current system status."""
+    """Get current system status"""
     return jsonify(detection_system.get_status())
 
 @app.route('/api/faces', methods=['GET'])
 def get_faces():
-    """Get list of recent faces."""
-    faces = detection_system.get_faces()
-    return jsonify({"faces": faces})
+    """Get list of recent faces"""
+    return jsonify({
+        "faces": detection_system.get_faces()
+    })
 
 @app.route('/api/alarm/stop', methods=['POST'])
 def stop_alarm():
-    """Stop the alarm and reset the system status to Normal."""
+    """Stop the alarm"""
     try:
         detection_system.stop_alarm()
+        # Reset status to Normal when alarm is manually stopped
         detection_system.system_status = "Normal"
         return jsonify({"success": True})
     except Exception as e:
@@ -72,7 +75,7 @@ def stop_alarm():
 
 @app.route('/api/telegram/test', methods=['POST'])
 def test_telegram():
-    """Send a test message verifying Telegram configuration."""
+    """Send a test message to verify Telegram configuration"""
     try:
         success = detection_system.test_telegram()
         return jsonify({"success": success})
@@ -81,76 +84,68 @@ def test_telegram():
 
 @app.route('/api/tts', methods=['POST'])
 def text_to_speech():
-    """Convert text to speech using pyttsx3."""
+    """Convert text to speech using pyttsx3"""
     try:
         data = request.json
         text = data.get('text', '')
+        
         if not text:
             return jsonify({"success": False, "error": "No text provided"})
-
-        def speak_text():
+        
+        # Create a new engine instance for each request
+        local_engine = pyttsx3.init()
+        local_engine.setProperty('rate', 150)
+        local_engine.setProperty('volume', 0.9)
+        
+        try:
+            # Speak the text with the local engine
+            local_engine.say(text)
+            local_engine.runAndWait()
+        finally:
+            # Make sure to properly clean up the engine
             try:
-                # Using a new process for TTS to avoid threading issues
-                os.system(f'python -c "import pyttsx3; engine = pyttsx3.init(); engine.say(\'{text}\'); engine.runAndWait()"')
-            except Exception as e:
-                print(f"TTS subprocess error: {str(e)}")
-
-        threading.Thread(target=speak_text).start()
+                local_engine.endLoop()
+            except:
+                pass
+            local_engine.stop()
+            del local_engine
+        
         return jsonify({"success": True})
     except Exception as e:
-        print(f"TTS Error: {str(e)}")
+        print(f"TTS Error: {str(e)}")  # Log the error
         return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/statistics', methods=['GET'])
-def get_statistics():
-    """Get system statistics such as uptime and frames processed."""
-    if detection_system is not None:
-        stats = detection_system.get_statistics()
-        stats.update({"status": detection_system.system_status})
-        return jsonify(stats)
-    else:
-        return jsonify({"error": "Detection system not initialized"})
 
 @app.route('/faces/<path:filename>')
 def serve_face(filename):
-    """Serve saved face images."""
+    """Serve face images"""
     return send_from_directory('faces', filename)
 
 @app.route('/detections/<path:filename>')
 def serve_detection(filename):
-    """Serve saved detection images."""
+    """Serve detection images"""
     return send_from_directory('detections', filename)
 
-@app.route('/video_feed')
-def video_feed():
-    """Provide a video streaming route."""
-    def generate():
-        while True:
-            frame = detection_system.get_latest_frame()
-            if frame is None:
-                time.sleep(0.05)  # small delay to prevent tight looping
-                continue
-            ret, buffer = cv2.imencode('.jpg', frame)
-            if not ret:
-                continue
-            frame_bytes = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
 def start_web_server(host='0.0.0.0', port=8080):
-    """Start the detection system and Flask web server."""
+    """Start the Flask web server"""
     global detection_thread
+    
+    # Start detection system if not already running
     if detection_thread is None or not detection_thread.is_alive():
         detection_thread = start_detection_system()
         # Give the detection system time to initialize
         time.sleep(1)
-    print("Starting web server on http://0.0.0.0:8080")
-    print("Detection system will run in the background")
-    print("Press Ctrl+C to exit")
-    app.run(host=host, port=port, threaded=True, processes=1, debug=True)
+    
+    # Start Flask server
+    app.run(host=host, port=port, threaded=True)
 
 if __name__ == '__main__':
+    # Create required directories
     os.makedirs('faces', exist_ok=True)
     os.makedirs('detections', exist_ok=True)
+    
+    print(f"Starting web server on http://0.0.0.0:8080")
+    print(f"Detection system will run in the background")
+    print(f"Press Ctrl+C to exit")
+    
+    # Start web server
     start_web_server()

@@ -7,25 +7,17 @@
     <style>
         /* Main Styles - Optimized for Pi */
         :root {
-            --primary-color: #4361ee;
-            --primary-light: #4895ef;
-            --primary-dark: #3f37c9;
-            --danger-color: #e63946;
-            --success-color: #2a9d8f;
-            --warning-color: #f9c74f;
-            --info-color: #48cae4;
-            --dark-color: #1d3557;
+            --primary-color: #4a6cf7;
+            --danger-color: #f74a4a;
+            --success-color: #4af74a;
+            --warning-color: #f7d94a;
+            --info-color: #4acdf7;
+            --dark-color: #2c3e50;
             --light-color: #f8f9fa;
             --gray-color: #6c757d;
-            --gray-light: #dee2e6;
-            --gray-dark: #495057;
-            --card-bg: #ffffff;
-            --body-bg: #f0f4f8;
-            --border-radius: 10px;
-            --border-radius-sm: 6px;
-            --box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            --transition: all 0.2s ease;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            --border-radius: 8px;
+            --box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
         }
 
         * {
@@ -35,18 +27,16 @@
         }
 
         body {
-            font-family: var(--font-family);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
-            background-color: var(--body-bg);
+            background-color: #f0f2f5;
             color: var(--dark-color);
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1000px;
             margin: 0 auto;
-            padding: 12px;
+            padding: 15px;
         }
 
         header {
@@ -55,70 +45,47 @@
             align-items: center;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 1px solid var(--gray-light);
+            border-bottom: 1px solid #ddd;
         }
 
         header h1 {
-            font-size: 22px;
+            font-size: 24px;
             color: var(--dark-color);
-            font-weight: 600;
         }
 
         .main-content {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
         }
 
         /* Cards */
         .card {
-            background-color: var(--card-bg);
+            background-color: white;
             border-radius: var(--border-radius);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            box-shadow: var(--box-shadow);
             overflow: hidden;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            will-change: transform;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
         }
 
         .card-header {
-            background: linear-gradient(to right, var(--primary-dark), var(--primary-color));
+            background-color: var(--primary-color);
             color: white;
-            padding: 14px 18px;
-            display: flex;
-            align-items: center;
+            padding: 12px 15px;
         }
 
         .card-header h2 {
             font-size: 16px;
             margin: 0;
-            font-weight: 600;
-        }
-
-        .card-header i {
-            margin-right: 8px;
-            font-size: 16px;
         }
 
         .card-body {
-            padding: 16px;
-            flex: 1;
+            padding: 15px;
         }
 
         /* Toggle Switches */
         .toggle-container {
             margin-bottom: 12px;
-            background-color: var(--light-color);
-            border-radius: var(--border-radius-sm);
-            padding: 10px 14px;
         }
 
         .toggle {
@@ -130,15 +97,7 @@
 
         .toggle-label {
             font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-        }
-
-        .toggle-label i {
-            margin-right: 8px;
-            width: 18px;
-            text-align: center;
+            margin-right: 10px;
         }
 
         .toggle input {
@@ -152,7 +111,7 @@
             display: inline-block;
             width: 46px;
             height: 22px;
-            background-color: var(--gray-light);
+            background-color: #ccc;
             border-radius: 22px;
             transition: var(--transition);
         }
@@ -167,7 +126,6 @@
             background-color: white;
             border-radius: 50%;
             transition: var(--transition);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         .toggle input:checked + .toggle-slider {
@@ -180,44 +138,34 @@
 
         /* Form Elements */
         .form-group {
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
             font-weight: 500;
             font-size: 14px;
-            color: var(--gray-dark);
         }
 
         .form-group input {
             width: 100%;
-            padding: 8px 10px;
-            border: 1px solid var(--gray-light);
-            border-radius: var(--border-radius-sm);
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
             font-size: 14px;
-            transition: var(--transition);
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--primary-light);
-            box-shadow: 0 0 0 2px rgba(72, 149, 239, 0.2);
         }
 
         .btn {
             display: inline-block;
-            padding: 8px 14px;
+            padding: 8px 12px;
             border: none;
-            border-radius: var(--border-radius-sm);
+            border-radius: var(--border-radius);
             cursor: pointer;
             font-size: 14px;
             font-weight: 500;
             text-align: center;
             transition: var(--transition);
-            background-color: var(--primary-color);
-            color: white;
         }
 
         .btn-primary {
@@ -225,20 +173,24 @@
             color: white;
         }
 
+        .btn-primary:hover {
+            background-color: #3a5bd7;
+        }
+
         .btn-danger {
             background-color: var(--danger-color);
             color: white;
         }
 
-        .btn i {
-            margin-right: 6px;
+        .btn-danger:hover {
+            background-color: #d73a3a;
         }
 
         /* Status Indicator */
         #status-indicator {
             display: flex;
             align-items: center;
-            padding: 6px 14px;
+            padding: 6px 12px;
             border-radius: 16px;
             font-weight: 500;
             font-size: 14px;
@@ -264,15 +216,11 @@
             color: #333;
         }
 
-        #status-icon {
-            margin-right: 8px;
-        }
-
         /* Alarm Control */
         .alarm-control {
             display: flex;
             justify-content: center;
-            margin-top: 14px;
+            margin-top: 12px;
         }
 
         /* Faces Gallery */
@@ -285,17 +233,12 @@
         /* Live Camera Feed */
         .live-camera-feed {
             width: 100%;
-            height: 400px; /* Fixed height for video */
-            object-fit: contain; /* Changed from cover to contain */
-            border-radius: var(--border-radius-sm);
-            box-shadow: var(--box-shadow);
-            cursor: pointer;
-            transition: transform 0.2s ease;
+            border-radius: var(--border-radius);
         }
 
         .face-item {
             position: relative;
-            border-radius: var(--border-radius-sm);
+            border-radius: var(--border-radius);
             overflow: hidden;
             box-shadow: var(--box-shadow);
             height: 80px;
@@ -306,6 +249,11 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .face-item:hover img {
+            transform: scale(1.05);
         }
 
         .face-timestamp {
@@ -316,18 +264,16 @@
             background-color: rgba(0, 0, 0, 0.7);
             color: white;
             font-size: 9px;
-            padding: 3px 4px;
+            padding: 2px 4px;
             text-align: center;
         }
 
         .no-faces {
             grid-column: 1 / -1;
             text-align: center;
-            padding: 16px;
+            padding: 15px;
             color: var(--gray-color);
             font-size: 14px;
-            background-color: var(--light-color);
-            border-radius: var(--border-radius-sm);
         }
 
         /* Modal for expanded face images */
@@ -339,31 +285,24 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.85);
+            background-color: rgba(0, 0, 0, 0.8);
             overflow: auto;
-            align-items: center;
-            justify-content: center;
         }
 
         .modal-content {
             position: relative;
             margin: auto;
             display: block;
-            width: 95%;
-            max-width: 900px; /* Increased from 800px for larger display */
-            max-height: 95%;
-            padding: 25px;
-            background-color: rgba(0, 0, 0, 0.6);
-            border-radius: 12px;
+            max-width: 80%;
+            max-height: 80%;
+            padding: 15px;
         }
 
         .modal-image {
             width: 100%;
             height: auto;
             border-radius: 8px;
-            box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-            object-fit: contain; /* Ensures image maintains aspect ratio */
-            max-height: 85vh; /* Increased from 80vh for larger display */
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
 
         .close-modal {
@@ -371,87 +310,12 @@
             top: 10px;
             right: 20px;
             color: #f1f1f1;
-            font-size: 32px; /* Increased from 30px */
+            font-size: 30px;
             font-weight: bold;
             cursor: pointer;
-            z-index: 1010;
-        }
-
-        /* Add hover effect for better interactivity */
-        .close-modal:hover {
-            color: #ff4444;
-        }
-
-        /* Image controls for better viewing */
-        .modal-controls {
-            display: flex;
-            justify-content: center;
-            margin-top: 10px;
-        }
-
-        .modal-controls button {
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 5px 10px;
-            margin: 0 5px;
-            cursor: pointer;
-        }
-
-        .modal-controls button:hover {
-            background-color: rgba(255, 255, 255, 0.3);
-        }
-
-        /* Detection Status */
-        .detection-status {
-            display: flex;
-            align-items: center;
-            padding: 10px 14px;
-            background-color: var(--light-color);
-            border-radius: var(--border-radius-sm);
-            margin-bottom: 10px;
-        }
-
-        .status-dot {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: gray;
-            margin: 0 8px;
-        }
-
-        .last-detection-time {
-            margin-left: auto;
-            font-size: 12px;
-            color: var(--gray-dark);
-        }
-
-        /* Notification */
-        #notification {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 10px 16px;
-            border-radius: 8px;
-            color: white;
-            font-weight: 500;
-            z-index: 1001;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         /* Responsive Adjustments */
-        @media (max-width: 1100px) {
-            .main-content {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .video-card {
-                grid-column: span 1;
-            }
-        }
-
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -463,155 +327,20 @@
             }
             
             #status-indicator {
-                margin-top: 10px;
+                margin-top: 8px;
             }
             
             .modal-content {
                 max-width: 95%;
             }
-
-            .card-header h2 {
-                font-size: 15px;
-            }
-        }
-
-        /* Performance Optimizations for Pi */
-        /* Disable animations and transitions for better performance */
-        @media (max-width: 1024px) {
-            * {
-                transition: none !important;
-                animation: none !important;
-            }
-            
-            .card {
-                box-shadow: var(--box-shadow) !important;
-            }
-            
-            .toggle-slider:before {
-                transition: none !important;
-            }
-            
-            .toggle input:checked + .toggle-slider:before {
-                transform: translateX(24px) !important;
-            }
-            
-            .form-group input:focus {
-                box-shadow: none !important;
-            }
-        }
-
-        /* Video Card Styles */
-        .video-card {
-            grid-column: span 2;
-        }
-        
-        .video-container {
-            position: relative;
-            padding: 0;
-            overflow: hidden;
-            background-color: #000; /* Or any color you prefer */
-        }
-        
-        .live-camera-feed {
-            
-            width: 100%;
-            height: 400px; /* Fixed height for video */
-            object-fit: contain; /* Changed from cover to contain */
-            border-radius: var(--border-radius-sm);
-            box-shadow: var(--box-shadow);
-            cursor: pointer;
-            transition: transform 0.2s ease;
-        }
-        
-        .live-camera-feed:hover {
-            transform: scale(1.01);
-        }
-        
-        .fullscreen-button {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            opacity: 0.7;
-            transition: opacity 0.2s ease;
-        }
-        
-        .fullscreen-button:hover {
-            opacity: 1;
-        }
-        
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .video-card {
-                grid-column: span 1;
-            }
-        }
-        
-        /* Enhanced card styling for better appearance */
-        .card {
-            background-color: var(--card-bg);
-            border-radius: var(--border-radius);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            overflow: hidden;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            will-change: transform;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-        }
-        
-        .card-header {
-            background: linear-gradient(to right, var(--primary-dark), var(--primary-color));
-            color: white;
-            padding: 14px 18px;
-            display: flex;
-            align-items: center;
-        }
-        
-        /* Set a fixed height for the video feed */
-        .live-camera-feed {
-            width: 100%;
-            height: 400px; /* Fixed height for video */
-            object-fit: contain; /* Changed from cover to contain */
-            border-radius: var(--border-radius-sm);
-            box-shadow: var(--box-shadow);
-        }
-        
-        /* Add a specific class to target the TTS card in the HTML */
-        .tts-card .card-body {
-            min-height: 180px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-        
-        .dashboard-logo {
-            height: 80px;
-            vertical-align: middle;
         }
     </style>
-    <!-- Load Font Awesome asynchronously for better performance -->
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
 <body>
     <div class="container">
         <header>
-            <h1><img src="static\logo.png" alt="Dashboard Logo" style="height: 80px; vertical-align: middle;"> Detection System Dashboard</h1>
+            <h1>Detection System Dashboard</h1>
             <div id="status-indicator" class="status-normal">
                 <span id="status-icon"><i class="fas fa-check-circle"></i></span>
                 <span id="status-text">Normal</span>
@@ -619,77 +348,17 @@
         </header>
 
         <div class="main-content">
-            <div class="video-card card">
+            <div class="card">
                 <div class="card-header">
-                    <h2><i class="fas fa-video"></i> Live Feed</h2>
+                    <h2>Live Camera Feed</h2>
                 </div>
                 <div class="card-body">
-                    <div class="video-container">
-                        <img id="video-feed" class="live-camera-feed" src="/video_feed" alt="Live Camera Feed">
-                    </div>
-                </div>
-            </div>
-
-            <div class="card tts-card">
-                <div class="card-header">
-                    <i class="fas fa-volume-up"></i>
-                    <h2>Text-to-Speech (TTS)</h2>
-                </div>
-                <div class="card-body">
-                    <div class="form-group">
-                        <label for="tts-text">Enter Text</label>
-                        <input type="text" id="tts-text" placeholder="Type something to speak">
-                    </div>
-                    <div class="alarm-control">
-                        <button id="tts-speak" class="btn btn-primary">
-                            <i class="fas fa-volume-up"></i> Speak
-                        </button>
-                    </div>
+                    <img src="/video_feed" alt="Live Camera Feed" class="live-camera-feed">
                 </div>
             </div>
             
             <div class="card">
                 <div class="card-header">
-                    <i class="fas fa-chart-line"></i>
-                    <h2>System Statistics</h2>
-                </div>
-                <div class="card-body">
-                    <div class="detection-status">
-                        <i class="fas fa-clock"></i>
-                        <span class="stat-label">System Uptime:</span>
-                        <span id="uptime" class="stat-value">00:00:00</span>
-                    </div>
-                    
-                    <div class="detection-status">
-                        <i class="fas fa-film"></i>
-                        <span class="stat-label">Frames Processed:</span>
-                        <span id="frameCount" class="stat-value">0</span>
-                    </div>
-                    
-                    <div class="detection-status">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span class="stat-label">Current Status:</span>
-                        <span id="statusSummary" class="stat-value">Normal</span>
-                    </div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-user-circle"></i>
-                    <h2>Recent Faces</h2>
-                </div>
-                <div class="card-body">
-                    <div id="faces-gallery" class="faces-gallery">
-                        <!-- Face images will be loaded here dynamically -->
-                        <div class="no-faces">No faces detected yet</div>
-                    </div>
-                </div>
-            </div>
-
-
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-sliders-h"></i>
                     <h2>Detection Controls</h2>
                 </div>
                 <div class="card-body">
@@ -710,7 +379,7 @@
 
                     <div class="toggle-container">
                         <label class="toggle">
-                            <span class="toggle-label"><i class="fas fa-running"></i> Motion Detection</span>
+                            <span class="toggle-label"><i class="fas fa-movie"></i> Motion Detection</span>
                             <input type="checkbox" id="motion-toggle" checked>
                             <span class="toggle-slider"></span>
                         </label>
@@ -733,7 +402,6 @@
 
             <div class="card">
                 <div class="card-header">
-                    <i class="fab fa-telegram"></i>
                     <h2>Telegram Configuration</h2>
                 </div>
                 <div class="card-body">
@@ -757,14 +425,51 @@
                         <input type="number" id="telegram-cooldown" min="10" value="30">
                     </div>
                     <div class="alarm-control">
-                        <button id="save-telegram" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Save Settings
-                        </button>
+                        <button id="save-telegram" class="btn btn-primary">Save Telegram Settings</button>
                     </div>
                     <div class="alarm-control">
-                        <button id="test-telegram" class="btn btn-primary">
-                            <i class="fas fa-paper-plane"></i> Test Connection
+                        <button id="test-telegram" class="btn btn-primary">Test Telegram Connection</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Text-to-Speech (TTS)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="tts-text">Enter Text</label>
+                        <input type="text" id="tts-text" placeholder="Type something to speak">
+                    </div>
+                    <div class="alarm-control">
+                        <button id="tts-speak" class="btn btn-primary">
+                            <i class="fas fa-volume-up"></i> Speak
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Recent Faces</h2>
+                </div>
+                <div class="card-body">
+                    <div id="faces-gallery" class="faces-gallery">
+                        <!-- Face images will be loaded here dynamically -->
+                        <div class="no-faces">No faces detected yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Detection Status</h2>
+                </div>
+                <div class="card-body">
+                    <div class="detection-status" id="motionStatus">
+                        Motion Detection: <span class="status-dot"></span>
+                        <span class="last-detection-time"></span>
                     </div>
                 </div>
             </div>
@@ -780,13 +485,11 @@
         </div>
     </div>
 
-    <!-- Load Font Awesome at the end for better performance -->
-    <script async defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js"></script>
     <script>
         // DOM Elements
         const fireToggle = document.getElementById('fire-toggle');
         const smokeToggle = document.getElementById('smoke-toggle');
-        const motionToggle = document.getElementById('motion-toggle');
+        const motionToggle = document.getElementById('motion-toggle'); // Updated ID
         const faceToggle = document.getElementById('face-toggle');
         const telegramToggle = document.getElementById('telegram-toggle');
         const telegramToken = document.getElementById('telegram-token');
@@ -809,89 +512,6 @@
         // Configuration and Status
         let config = {};
         let systemStatus = 'Normal';
-        
-        // Debounce function to limit function calls for better performance
-        function debounce(func, wait) {
-            let timeout;
-            return function() {
-                const context = this;
-                const args = arguments;
-                clearTimeout(timeout);
-                timeout = setTimeout(() => {
-                    func.apply(context, args);
-                }, wait);
-            };
-        }
-
-        // Handle fullscreen functionality for video feed
-        function setupVideoFullscreen() {
-            const videoFeed = document.getElementById('video-feed');
-            const fullscreenBtn = document.getElementById('fullscreen-btn');
-            
-            // Function to toggle fullscreen
-            function toggleFullScreen() {
-                if (!document.fullscreenElement) {
-                    // Enter fullscreen
-                    if (videoFeed.requestFullscreen) {
-                        videoFeed.requestFullscreen();
-                    } else if (videoFeed.webkitRequestFullscreen) { /* Safari */
-                        videoFeed.webkitRequestFullscreen();
-                    } else if (videoFeed.msRequestFullscreen) { /* IE11 */
-                        videoFeed.msRequestFullscreen();
-                    }
-                    fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
-                } else {
-                    // Exit fullscreen
-                    if (document.exitFullscreen) {
-                        document.exitFullscreen();
-                    } else if (document.webkitExitFullscreen) { /* Safari */
-                        document.webkitExitFullscreen();
-                    } else if (document.msExitFullscreen) { /* IE11 */
-                        document.msExitFullscreen();
-                    }
-                    fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
-                }
-            }
-            
-            // Add click event listeners
-            if (videoFeed && fullscreenBtn) {
-                videoFeed.addEventListener('click', toggleFullScreen);
-                fullscreenBtn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Prevent triggering the videoFeed click
-                    toggleFullScreen();
-                });
-                
-                // Update button icon when exiting fullscreen via Escape key
-                document.addEventListener('fullscreenchange', () => {
-                    if (!document.fullscreenElement) {
-                        fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
-                    }
-                });
-            }
-        }
-        
-        // Fetch system statistics
-        function fetchStatistics() {
-            fetch('/api/statistics')
-                .then(response => response.json())
-                .then(data => {
-                    updateStatisticsUI(data);
-                })
-                .catch(error => console.error('Error fetching statistics:', error));
-        }
-
-        // Update UI with statistics
-        function updateStatisticsUI(data) {
-            // Update uptime
-            document.getElementById('uptime').textContent = data.uptime;
-            
-            // Update frames processed with thousands separators
-            document.getElementById('frameCount').textContent = 
-                data.frames_processed.toLocaleString();
-            
-            // Update current status
-            document.getElementById('statusSummary').textContent = data.status;
-        }
 
         // Initialize the dashboard
         function initDashboard() {
@@ -907,16 +527,9 @@
             // Set up event listeners
             setupEventListeners();
             
-            // Set up video fullscreen
-            setupVideoFullscreen();
-            
-            // Add statistics fetch
-            fetchStatistics();
-            
             // Set up periodic updates - optimized for Pi
-            setInterval(fetchStatus, 3000);  // Update status every 3 seconds (reduced from 2s)
-            setInterval(fetchFaces, 10000);  // Update faces every 10 seconds (reduced from 5s)
-            setInterval(fetchStatistics, 500);  // Update statistics every 2 seconds
+            setInterval(fetchStatus, 2000);  // Update status every 2 seconds
+            setInterval(fetchFaces, 5000);   // Update faces every 5 seconds
         }
 
         // Fetch configuration from server
@@ -1011,27 +624,19 @@
                 return;
             }
             
-            // Limit the number of faces to display for better performance
-            const maxFaces = 12;
-            const limitedFaces = faces.slice(0, maxFaces);
-            
             let galleryHTML = '';
             
-            limitedFaces.forEach(face => {
+            faces.forEach(face => {
                 // Extract timestamp from filename (assuming format face_TIMESTAMP.jpg)
                 const timestamp = face.replace('face_', '').replace('.jpg', '');
                 
                 galleryHTML += `
                     <div class="face-item" onclick="openModal('/faces/${face}')">
-                        <img src="/faces/${face}" alt="Detected Face" loading="lazy" onerror="this.src='data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22100%22%20height%3D%22100%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_1%20text%20%7B%20fill%3A%23999%3Bfont-weight%3Anormal%3Bfont-family%3AArial%2C%20Helvetica%2C%20Open%20Sans%2C%20sans-serif%2C%20monospace%3Bfont-size%3A10pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_1%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22%23eee%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%2220%22%20y%3D%2255%22%3EImage%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E';">
+                        <img src="/faces/${face}" alt="Detected Face" onerror="this.src='data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22100%22%20height%3D%22100%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_1%20text%20%7B%20fill%3A%23999%3Bfont-weight%3Anormal%3Bfont-family%3AArial%2C%20Helvetica%2C%20Open%20Sans%2C%20sans-serif%2C%20monospace%3Bfont-size%3A10pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_1%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22%23eee%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%2220%22%20y%3D%2255%22%3EImage%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E';">
                         <div class="face-timestamp">ID: ${timestamp}</div>
                     </div>
                 `;
             });
-            
-            if (faces.length > maxFaces) {
-                galleryHTML += `<div class="no-faces">+ ${faces.length - maxFaces} more faces</div>`;
-            }
             
             facesGallery.innerHTML = galleryHTML;
         }
@@ -1099,7 +704,7 @@
             ttsSpeakBtn.addEventListener('click', () => {
                 const text = ttsTextInput.value;
                 if (text.trim() === '') {
-                    showNotification('Please enter some text.', 'warning');
+                    alert('Please enter some text.');
                     return;
                 }
 
@@ -1114,24 +719,16 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        showNotification('Text is being spoken on the Raspberry Pi.', 'success');
+                        alert('Text is being spoken on the Raspberry Pi.');
                     } else {
-                        showNotification('Failed to process TTS: ' + (data.error || 'Unknown error'), 'error');
+                        alert('Failed to process TTS: ' + (data.error || 'Unknown error'));
                     }
                 })
                 .catch(error => {
                     console.error('Error with TTS:', error);
-                    showNotification('Error with TTS. Please try again.', 'error');
+                    alert('Error with TTS. Please try again.');
                 });
             });
-
-            // Reset zoom when opening new image
-            const originalOpenModal = openModal;
-            window.openModal = function(imageSrc) {
-                modalImage.src = imageSrc;
-                faceModal.style.display = 'flex';
-            };
-
         }
 
         // Update detection configuration
@@ -1160,7 +757,6 @@
                         case 'motion': motionToggle.checked = !enabled; break;
                         case 'face': faceToggle.checked = !enabled; break;
                     }
-                    showNotification('Failed to update detection settings', 'error');
                 }
             })
             .catch(error => {
@@ -1172,12 +768,11 @@
                     case 'motion': motionToggle.checked = !enabled; break;
                     case 'face': faceToggle.checked = !enabled; break;
                 }
-                showNotification('Error updating detection settings', 'error');
             });
         }
 
-        // Save Telegram settings - debounced to prevent multiple rapid calls
-        const saveTelegramSettings = debounce(function() {
+        // Save Telegram settings
+        function saveTelegramSettings() {
             const values = {
                 enabled: telegramToggle.checked,
                 token: telegramToken.value,
@@ -1198,19 +793,19 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showNotification('Telegram settings saved successfully!', 'success');
+                    alert('Telegram settings saved successfully!');
                 } else {
-                    showNotification('Failed to save Telegram settings: ' + (data.error || 'Unknown error'), 'error');
+                    alert('Failed to save Telegram settings: ' + (data.error || 'Unknown error'));
                 }
             })
             .catch(error => {
                 console.error('Error saving Telegram settings:', error);
-                showNotification('Error saving Telegram settings. Please try again.', 'error');
+                alert('Error saving Telegram settings. Please try again.');
             });
-        }, 300);
+        }
         
-        // Test Telegram connection - debounced to prevent multiple rapid calls
-        const testTelegramConnection = debounce(function() {
+        // Test Telegram connection
+        function testTelegramConnection() {
             fetch('/api/telegram/test', {
                 method: 'POST',
                 headers: {
@@ -1221,19 +816,19 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showNotification('Test message sent successfully! Check your Telegram.', 'success');
+                    alert('Test message sent successfully! Check your Telegram.');
                 } else {
-                    showNotification('Failed to send test message: ' + (data.error || 'Telegram might not be properly configured'), 'error');
+                    alert('Failed to send test message: ' + (data.error || 'Telegram might not be properly configured'));
                 }
             })
             .catch(error => {
                 console.error('Error testing Telegram:', error);
-                showNotification('Error testing Telegram connection. Please check your settings.', 'error');
+                alert('Error testing Telegram connection. Please check your settings.');
             });
-        }, 300);
+        }
 
-        // Stop alarm - debounced to prevent multiple rapid calls
-        const stopAlarm = debounce(function() {
+        // Stop alarm
+        function stopAlarm() {
             fetch('/api/alarm/stop', {
                 method: 'POST',
                 headers: {
@@ -1243,57 +838,13 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    showNotification('Alarm stopped successfully', 'success');
-                } else {
+                if (!data.success) {
                     console.error('Failed to stop alarm:', data.error);
-                    showNotification('Failed to stop alarm', 'error');
                 }
             })
             .catch(error => {
                 console.error('Error stopping alarm:', error);
-                showNotification('Error stopping alarm', 'error');
             });
-        }, 300);
-
-        // Show notification
-        function showNotification(message, type = 'info') {
-            // Create notification element if it doesn't exist
-            let notification = document.getElementById('notification');
-            if (notification) {
-                // Remove existing notification to prevent stacking
-                notification.parentNode.removeChild(notification);
-            }
-            
-            notification = document.createElement('div');
-            notification.id = 'notification';
-            
-            // Set notification style based on type
-            switch(type) {
-                case 'success':
-                    notification.style.backgroundColor = 'var(--success-color)';
-                    break;
-                case 'error':
-                    notification.style.backgroundColor = 'var(--danger-color)';
-                    break;
-                case 'warning':
-                    notification.style.backgroundColor = 'var(--warning-color)';
-                    notification.style.color = '#333';
-                    break;
-                default:
-                    notification.style.backgroundColor = 'var(--primary-color)';
-            }
-
-            // Set message
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            // Hide notification after 3 seconds
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 3000);
         }
 
         // Initialize the dashboard when the page loads
