@@ -66,7 +66,7 @@
 
         .main-content {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 16px;
         }
 
@@ -74,18 +74,25 @@
         .card {
             background-color: var(--card-bg);
             border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             overflow: hidden;
             height: 100%;
             display: flex;
             flex-direction: column;
-            will-change: transform; /* Hardware acceleration hint */
+            will-change: transform;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
         }
 
         .card-header {
-            background-color: var(--primary-color);
+            background: linear-gradient(to right, var(--primary-dark), var(--primary-color));
             color: white;
-            padding: 12px 16px;
+            padding: 14px 18px;
             display: flex;
             align-items: center;
         }
@@ -278,9 +285,12 @@
         /* Live Camera Feed */
         .live-camera-feed {
             width: 100%;
-            height: auto;
+            height: 400px; /* Fixed height for video */
+            object-fit: contain; /* Changed from cover to contain */
             border-radius: var(--border-radius-sm);
             box-shadow: var(--box-shadow);
+            cursor: pointer;
+            transition: transform 0.2s ease;
         }
 
         .face-item {
@@ -329,7 +339,7 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.85);
             overflow: auto;
             align-items: center;
             justify-content: center;
@@ -339,16 +349,21 @@
             position: relative;
             margin: auto;
             display: block;
-            max-width: 80%;
-            max-height: 80%;
-            padding: 15px;
+            width: 95%;
+            max-width: 900px; /* Increased from 800px for larger display */
+            max-height: 95%;
+            padding: 25px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 12px;
         }
 
         .modal-image {
             width: 100%;
             height: auto;
             border-radius: 8px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+            object-fit: contain; /* Ensures image maintains aspect ratio */
+            max-height: 85vh; /* Increased from 80vh for larger display */
         }
 
         .close-modal {
@@ -356,9 +371,36 @@
             top: 10px;
             right: 20px;
             color: #f1f1f1;
-            font-size: 30px;
+            font-size: 32px; /* Increased from 30px */
             font-weight: bold;
             cursor: pointer;
+            z-index: 1010;
+        }
+
+        /* Add hover effect for better interactivity */
+        .close-modal:hover {
+            color: #ff4444;
+        }
+
+        /* Image controls for better viewing */
+        .modal-controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        .modal-controls button {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+
+        .modal-controls button:hover {
+            background-color: rgba(255, 255, 255, 0.3);
         }
 
         /* Detection Status */
@@ -400,6 +442,16 @@
         }
 
         /* Responsive Adjustments */
+        @media (max-width: 1100px) {
+            .main-content {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .video-card {
+                grid-column: span 1;
+            }
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -457,11 +509,14 @@
             position: relative;
             padding: 0;
             overflow: hidden;
+            background-color: #000; /* Or any color you prefer */
         }
         
         .live-camera-feed {
+            
             width: 100%;
-            height: auto;
+            height: 400px; /* Fixed height for video */
+            object-fit: contain; /* Changed from cover to contain */
             border-radius: var(--border-radius-sm);
             box-shadow: var(--box-shadow);
             cursor: pointer;
@@ -500,15 +555,63 @@
                 grid-column: span 1;
             }
         }
+        
+        /* Enhanced card styling for better appearance */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            will-change: transform;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-header {
+            background: linear-gradient(to right, var(--primary-dark), var(--primary-color));
+            color: white;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        /* Set a fixed height for the video feed */
+        .live-camera-feed {
+            width: 100%;
+            height: 400px; /* Fixed height for video */
+            object-fit: contain; /* Changed from cover to contain */
+            border-radius: var(--border-radius-sm);
+            box-shadow: var(--box-shadow);
+        }
+        
+        /* Add a specific class to target the TTS card in the HTML */
+        .tts-card .card-body {
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        
+        .dashboard-logo {
+            height: 80px;
+            vertical-align: middle;
+        }
     </style>
     <!-- Load Font Awesome asynchronously for better performance -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-</head>
 <body>
     <div class="container">
         <header>
-            <h1><i class="fas fa-shield-alt"></i> Detection System Dashboard</h1>
+            <h1><img src="static\logo.png" alt="Dashboard Logo" style="height: 80px; vertical-align: middle;"> Detection System Dashboard</h1>
             <div id="status-indicator" class="status-normal">
                 <span id="status-icon"><i class="fas fa-check-circle"></i></span>
                 <span id="status-text">Normal</span>
@@ -516,19 +619,74 @@
         </header>
 
         <div class="main-content">
-            <div class="card video-card">
+            <div class="video-card card">
                 <div class="card-header">
-                    <i class="fas fa-video"></i>
-                    <h2>Live Camera Feed</h2>
+                    <h2><i class="fas fa-video"></i> Live Feed</h2>
                 </div>
-                <div class="card-body video-container">
-                    <img id="video-feed" src="/video_feed" alt="Live Camera Feed" class="live-camera-feed">
-                    <button id="fullscreen-btn" class="fullscreen-button" title="Toggle Full Screen">
-                        <i class="fas fa-expand"></i>
-                    </button>
+                <div class="card-body">
+                    <div class="video-container">
+                        <img id="video-feed" class="live-camera-feed" src="/video_feed" alt="Live Camera Feed">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card tts-card">
+                <div class="card-header">
+                    <i class="fas fa-volume-up"></i>
+                    <h2>Text-to-Speech (TTS)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="tts-text">Enter Text</label>
+                        <input type="text" id="tts-text" placeholder="Type something to speak">
+                    </div>
+                    <div class="alarm-control">
+                        <button id="tts-speak" class="btn btn-primary">
+                            <i class="fas fa-volume-up"></i> Speak
+                        </button>
+                    </div>
                 </div>
             </div>
             
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h2>System Statistics</h2>
+                </div>
+                <div class="card-body">
+                    <div class="detection-status">
+                        <i class="fas fa-clock"></i>
+                        <span class="stat-label">System Uptime:</span>
+                        <span id="uptime" class="stat-value">00:00:00</span>
+                    </div>
+                    
+                    <div class="detection-status">
+                        <i class="fas fa-film"></i>
+                        <span class="stat-label">Frames Processed:</span>
+                        <span id="frameCount" class="stat-value">0</span>
+                    </div>
+                    
+                    <div class="detection-status">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span class="stat-label">Current Status:</span>
+                        <span id="statusSummary" class="stat-value">Normal</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-user-circle"></i>
+                    <h2>Recent Faces</h2>
+                </div>
+                <div class="card-body">
+                    <div id="faces-gallery" class="faces-gallery">
+                        <!-- Face images will be loaded here dynamically -->
+                        <div class="no-faces">No faces detected yet</div>
+                    </div>
+                </div>
+            </div>
+
+
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-sliders-h"></i>
@@ -611,50 +769,6 @@
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-volume-up"></i>
-                    <h2>Text-to-Speech (TTS)</h2>
-                </div>
-                <div class="card-body">
-                    <div class="form-group">
-                        <label for="tts-text">Enter Text</label>
-                        <input type="text" id="tts-text" placeholder="Type something to speak">
-                    </div>
-                    <div class="alarm-control">
-                        <button id="tts-speak" class="btn btn-primary">
-                            <i class="fas fa-volume-up"></i> Speak
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-user-circle"></i>
-                    <h2>Recent Faces</h2>
-                </div>
-                <div class="card-body">
-                    <div id="faces-gallery" class="faces-gallery">
-                        <!-- Face images will be loaded here dynamically -->
-                        <div class="no-faces">No faces detected yet</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-chart-line"></i>
-                    <h2>Detection Status</h2>
-                </div>
-                <div class="card-body">
-                    <div class="detection-status" id="motionStatus">
-                        <i class="fas fa-running"></i> Motion Detection: <span class="status-dot"></span>
-                        <span class="last-detection-time"></span>
-                    </div>
-                </div>
-            </div>
-
         </div>
     </div>
 
@@ -668,7 +782,6 @@
 
     <!-- Load Font Awesome at the end for better performance -->
     <script async defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js"></script>
-
     <script>
         // DOM Elements
         const fireToggle = document.getElementById('fire-toggle');
@@ -757,6 +870,29 @@
             }
         }
         
+        // Fetch system statistics
+        function fetchStatistics() {
+            fetch('/api/statistics')
+                .then(response => response.json())
+                .then(data => {
+                    updateStatisticsUI(data);
+                })
+                .catch(error => console.error('Error fetching statistics:', error));
+        }
+
+        // Update UI with statistics
+        function updateStatisticsUI(data) {
+            // Update uptime
+            document.getElementById('uptime').textContent = data.uptime;
+            
+            // Update frames processed with thousands separators
+            document.getElementById('frameCount').textContent = 
+                data.frames_processed.toLocaleString();
+            
+            // Update current status
+            document.getElementById('statusSummary').textContent = data.status;
+        }
+
         // Initialize the dashboard
         function initDashboard() {
             // Load initial configuration
@@ -774,9 +910,13 @@
             // Set up video fullscreen
             setupVideoFullscreen();
             
+            // Add statistics fetch
+            fetchStatistics();
+            
             // Set up periodic updates - optimized for Pi
             setInterval(fetchStatus, 3000);  // Update status every 3 seconds (reduced from 2s)
             setInterval(fetchFaces, 10000);  // Update faces every 10 seconds (reduced from 5s)
+            setInterval(fetchStatistics, 500);  // Update statistics every 2 seconds
         }
 
         // Fetch configuration from server
@@ -984,6 +1124,14 @@
                     showNotification('Error with TTS. Please try again.', 'error');
                 });
             });
+
+            // Reset zoom when opening new image
+            const originalOpenModal = openModal;
+            window.openModal = function(imageSrc) {
+                modalImage.src = imageSrc;
+                faceModal.style.display = 'flex';
+            };
+
         }
 
         // Update detection configuration
@@ -1153,4 +1301,3 @@
     </script>
 </body>
 </html>
-``` 
