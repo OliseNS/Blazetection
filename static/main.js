@@ -29,6 +29,9 @@ const detectionGallery = document.getElementById('detection-gallery');
 let config = {};
 let systemStatus = 'Normal';
 
+// Array to store TTS history
+let ttsHistory = [];
+
 // Debounce function to limit function calls for better performance
 function debounce(func, wait) {
     let timeout;
@@ -415,6 +418,17 @@ function setupEventListeners() {
             .then((data) => {
                 if (data.success) {
                     showNotification('Text is being spoken on the Raspberry Pi.', 'success');
+
+                    // Add text to history only if it's not already present
+                    if (!ttsHistory.includes(text)) {
+                        ttsHistory.unshift(text); // Add to the beginning
+                        if (ttsHistory.length > 5) {
+                            ttsHistory.pop(); // Remove the oldest item
+                        }
+                    }
+
+                    // Update the TTS history UI
+                    updateTTSHistoryUI();
                 } else {
                     showNotification('Failed to process TTS.', 'error');
                 }
@@ -531,6 +545,43 @@ function showNotification(message, type = 'info') {
             notification.parentNode.removeChild(notification);
         }
     }, 3000);
+}
+
+// Function to update TTS history UI
+function updateTTSHistoryUI() {
+    const ttsHistoryContainer = document.getElementById('tts-history');
+    ttsHistoryContainer.innerHTML = ''; // Clear existing history
+
+    if (ttsHistory.length === 0) {
+        ttsHistoryContainer.innerHTML = '<div class="no-faces">No TTS history yet</div>';
+        return;
+    }
+
+    ttsHistory.forEach((text, index) => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'tts-history-item';
+        historyItem.textContent = text;
+
+        // Add click event to replay the text
+        historyItem.addEventListener('click', () => {
+            fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.success) {
+                        showNotification(`Replaying: "${text}"`, 'success');
+                    } else {
+                        showNotification('Failed to replay TTS.', 'error');
+                    }
+                })
+                .catch(() => showNotification('Error replaying TTS. Please try again.', 'error'));
+        });
+
+        ttsHistoryContainer.appendChild(historyItem);
+    });
 }
 
 // Refresh header stats

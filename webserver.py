@@ -164,6 +164,7 @@ def start_web_server(host='0.0.0.0', port=8080):
     if detection_thread is None or not detection_thread.is_alive():
         detection_thread = start_detection_system()
         time.sleep(1)
+        tts_queue.put("System started successfully.")
 
     app.run(host=host, port=port, threaded=True)
 
@@ -171,6 +172,7 @@ if __name__ == '__main__':
     os.makedirs('faces', exist_ok=True)
     os.makedirs('detections', exist_ok=True)
 
+    tts_queue.put("Starting the web server and detection system. Please wait.")  # TTS announcement
     print(f"Starting web server on http://0.0.0.0:8080")
     print(f"Detection system will run in the background")
     print(f"Press Ctrl+C to exit")
