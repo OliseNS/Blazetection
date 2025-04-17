@@ -1007,10 +1007,8 @@ class DetectionSystem:
         
         return {
             "uptime": uptime_formatted,
-            "uptime_seconds": uptime_seconds,
             "frames_processed": self.frames_processed
         }
-
 
 # Create a global detection system instance
 detection_system = None

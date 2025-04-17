@@ -4,6 +4,7 @@ import threading
 import time
 from datetime import datetime
 import pyttsx3
+import queue
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -21,6 +22,28 @@ tts_engine = pyttsx3.init()
 tts_engine.setProperty('rate', 150)
 tts_engine.setProperty('volume', 0.9)
 
+# Create a queue for TTS requests
+tts_queue = queue.Queue()
+
+# Function to process TTS requests from the queue
+def process_tts_queue():
+    while True:
+        text = tts_queue.get()  # Get the next text from the queue
+        if text is None:  # Exit signal
+            break
+        try:
+            # Ensure the TTS engine processes the entire text
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception as e:
+            print(f"TTS Processing Error: {str(e)}")
+        finally:
+            tts_queue.task_done()  # Mark the task as done
+
+# Start a background thread to process the TTS queue
+tts_thread = threading.Thread(target=process_tts_queue, daemon=True)
+tts_thread.start()
+
 # Start detection system in a separate thread
 detection_thread = None
 
@@ -36,31 +59,30 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    """Update configuration"""
     try:
         data = request.json
         section = data.get('section')
         values = data.get('values')
-        
-        if section and values:
-            success = detection_system.config_manager.update_section(section, values)
-            return jsonify({"success": success})
-        else:
-            return jsonify({"success": False, "error": "Missing section or values"})
+        detection_system.config_manager.update_section(section, values)  # Ensure this is implemented
+        return jsonify({"success": True}), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    """Get current system status"""
-    return jsonify(detection_system.get_status())
+    try:
+        status = detection_system.system_status  # Ensure this is implemented
+        return jsonify({"status": status}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/faces', methods=['GET'])
 def get_faces():
-    """Get list of recent faces"""
-    return jsonify({
-        "faces": detection_system.get_faces()
-    })
+    try:
+        faces = detection_system.get_faces()  # Ensure this is implemented
+        return jsonify({"faces": faces}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/alarm/stop', methods=['POST'])
 def stop_alarm():
@@ -84,36 +106,29 @@ def test_telegram():
 
 @app.route('/api/tts', methods=['POST'])
 def text_to_speech():
-    """Convert text to speech using pyttsx3"""
+    """Convert text to speech using pyttsx3 with a queue"""
     try:
         data = request.json
         text = data.get('text', '')
-        
+
         if not text:
             return jsonify({"success": False, "error": "No text provided"})
-        
-        # Create a new engine instance for each request
-        local_engine = pyttsx3.init()
-        local_engine.setProperty('rate', 150)
-        local_engine.setProperty('volume', 0.9)
-        
-        try:
-            # Speak the text with the local engine
-            local_engine.say(text)
-            local_engine.runAndWait()
-        finally:
-            # Make sure to properly clean up the engine
-            try:
-                local_engine.endLoop()
-            except:
-                pass
-            local_engine.stop()
-            del local_engine
-        
-        return jsonify({"success": True})
+
+        # Add the text to the TTS queue
+        tts_queue.put(text)
+
+        return jsonify({"success": True, "message": "Text added to TTS queue"})
     except Exception as e:
         print(f"TTS Error: {str(e)}")  # Log the error
         return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/statistics', methods=['GET'])
+def get_statistics():
+    try:
+        stats = detection_system.get_statistics()  # Ensure this is implemented
+        return jsonify(stats), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/faces/<path:filename>')
 def serve_face(filename):
