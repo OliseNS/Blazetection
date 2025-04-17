@@ -870,54 +870,42 @@ class DetectionSystem:
     
     def update_alarm_state(self, fire, smoke, image_path=None):
         """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
-        # Track when the last fire/smoke was detected
-        if not hasattr(self, 'last_fire_smoke_time'):
-            self.last_fire_smoke_time = 0
-            
         if fire and self.config["detection"]["fire"]:
             self.fire_persistence_count += 1
-            self.last_fire_smoke_time = time.time()  # Update the timestamp when fire is detected
-            if self.fire_persistence_count == self.ALARM_THRESHOLD:
+            self.last_fire_smoke_time = time.time()
+            if self.fire_persistence_count == self.ALARM_THRESHOLD - 1 and not self.pre_alarm_logged:
+                self.system_status = "FIRE PRE-ALERT"
+                print(f"{Colors.YELLOW}Fire pre-alert triggered!{Colors.RESET}")
+                self.pre_alarm_logged = True
+            elif self.fire_persistence_count >= self.ALARM_THRESHOLD:
                 self.system_status = "FIRE DETECTED!"
                 self.last_detections["fire"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Try to send notification, ensure latest config is used
-                success = self.telegram_service.send_fire_alert(image_path)
-                print(f"Fire alert notification sent: {success}")
-                
+                self.telegram_service.send_fire_alert(image_path)
                 self.play_alarm_sound()
         else:
             self.fire_persistence_count = max(0, self.fire_persistence_count - 1)
 
         if smoke and self.config["detection"]["smoke"]:
             self.smoke_persistence_count += 1
-            self.last_fire_smoke_time = time.time()  # Update the timestamp when smoke is detected
-            if self.smoke_persistence_count == self.ALARM_THRESHOLD:
+            self.last_fire_smoke_time = time.time()
+            if self.smoke_persistence_count == self.ALARM_THRESHOLD - 1 and not self.pre_alarm_logged:
+                self.system_status = "SMOKE PRE-ALERT"
+                print(f"{Colors.YELLOW}Smoke pre-alert triggered!{Colors.RESET}")
+                self.pre_alarm_logged = True
+            elif self.smoke_persistence_count >= self.ALARM_THRESHOLD:
                 self.system_status = "SMOKE DETECTED!"
                 self.last_detections["smoke"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Try to send notification, ensure latest config is used
-                success = self.telegram_service.send_smoke_alert(image_path)
-                print(f"Smoke alert notification sent: {success}")
-                
+                self.telegram_service.send_smoke_alert(image_path)
                 self.play_alarm_sound()
         else:
             self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)
 
         # Stop alarm if no fire or smoke has been detected for 3 seconds
         current_time = time.time()
-        if (self.alarm_playing and 
-            not (fire or smoke) and
-            current_time - self.last_fire_smoke_time >= 3.0):
+        if (self.alarm_playing and not (fire or smoke) and
+                current_time - self.last_fire_smoke_time >= 3.0):
             print(f"{Colors.GREEN}No fire/smoke detected for 3 seconds, stopping alarm{Colors.RESET}")
             self.stop_alarm()
-
-        # Handle pre-alarm status changes if alarm isn't already triggered
-        if (not self.alarm_playing and 
-            (self.fire_persistence_count < self.ALARM_THRESHOLD and 
-             self.smoke_persistence_count < self.ALARM_THRESHOLD)):
-            self.alarm_triggered = False
-            self.pre_alarm_logged = False
 
     def play_alarm_sound(self):
         """Play alarm sound in a thread-safe manner with short beep cycles"""
@@ -928,23 +916,17 @@ class DetectionSystem:
 
         def alarm_loop():
             try:
-                # Play a 0.5-second beep repeatedly until the alarm is stopped
                 while self.alarm_playing and self.running:
-                    try:
-                        self.alarm.fire_alarm_siren(duration=0.5)
-                        time.sleep(0.05)  # Small delay between beeps
-                    except Exception as e:
-                        print(f"Error in alarm loop: {str(e)}")
-                        time.sleep(1)  # Longer delay on error before retrying
+                    self.alarm.fire_alarm_siren(duration=0.5)
+                    time.sleep(0.05)  # Small delay between beeps
             except Exception as e:
-                print(f"Error in alarm thread: {str(e)}")
+                print(f"Error in alarm loop: {str(e)}")
             finally:
                 self.alarm_playing = False
-                self.alarm.cleanup()
 
         if self.alarm_thread and self.alarm_thread.is_alive():
             self.alarm_thread.join(timeout=1)
-        
+
         self.alarm_thread = threading.Thread(target=alarm_loop, daemon=True)
         self.alarm_thread.start()
 
