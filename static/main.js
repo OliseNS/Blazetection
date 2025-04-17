@@ -29,6 +29,10 @@ const detectionGallery = document.getElementById('detection-gallery');
 let config = {};
 let systemStatus = 'Normal';
 
+// TTS History
+let ttsHistory = [];
+const TTS_HISTORY_MAX = 5;
+
 // Debounce function to limit function calls for better performance
 function debounce(func, wait) {
     let timeout;
@@ -406,20 +410,18 @@ function setupEventListeners() {
             return;
         }
 
-        fetch('/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
-        })
-            .then((response) => response.json())
-            .then((data) => {
-                if (data.success) {
-                    showNotification('Text is being spoken on the Raspberry Pi.', 'success');
-                } else {
-                    showNotification('Failed to process TTS.', 'error');
-                }
-            })
-            .catch(() => showNotification('Error with TTS. Please try again.', 'error'));
+        // Add to history (limit to 5 items)
+        if (ttsHistory.indexOf(text) === -1) {
+            // Only add if not already in history
+            if (ttsHistory.length >= TTS_HISTORY_MAX) {
+                ttsHistory.shift(); // Remove oldest item
+            }
+            ttsHistory.push(text);
+            updateTtsHistoryUI();
+        }
+
+        speakText(text);
+        ttsTextInput.value = ''; // Clear input after sending
     });
 }
 
@@ -544,6 +546,47 @@ function refreshHeaderStats() {
             })
             .catch((error) => console.error('Error refreshing header stats:', error));
     }, 500); // Refresh every 0.5 seconds
+}
+
+// Update the TTS history UI
+function updateTtsHistoryUI() {
+    const ttsHistoryElement = document.getElementById('tts-history');
+    
+    if (ttsHistory.length === 0) {
+        ttsHistoryElement.innerHTML = '<div class="no-faces">No TTS history yet</div>';
+        return;
+    }
+    
+    ttsHistoryElement.innerHTML = '';
+    
+    // Display most recent messages first
+    for (let i = ttsHistory.length - 1; i >= 0; i--) {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'tts-history-item';
+        historyItem.textContent = ttsHistory[i];
+        historyItem.addEventListener('click', () => {
+            speakText(ttsHistory[i]);
+        });
+        ttsHistoryElement.appendChild(historyItem);
+    }
+}
+
+// Handle speaking text
+function speakText(text) {
+    fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+    })
+        .then((response) => response.json())
+        .then((data) => {
+            if (data.success) {
+                showNotification('Text is being spoken on the system.', 'success');
+            } else {
+                showNotification('Failed to process TTS.', 'error');
+            }
+        })
+        .catch(() => showNotification('Error with TTS. Please try again.', 'error'));
 }
 
 // Initialize the dashboard when the page loads
