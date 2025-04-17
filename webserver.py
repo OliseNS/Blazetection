@@ -2,8 +2,10 @@ import os
 import threading
 import time
 import queue
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 import pyttsx3
+import cv2
+import asyncio
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -156,6 +158,20 @@ def serve_face(filename):
     """Serve face images"""
     return send_from_directory('faces', filename)
 
+@app.route('/video_feed')
+def video_feed():
+    """Video streaming route. Put this in the src attribute of an img tag."""
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def generate_frames():
+    """Generate frames for the video stream."""
+    while True:
+        frame = detection_system.get_latest_frame()
+        ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        frame = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""

@@ -315,25 +315,31 @@ class Camera:
         """Initialize camera capture"""
         self.cap = cv2.VideoCapture(camera_index)
         if not self.cap.isOpened():
-            raise IOError(f"{Colors.RED}Error accessing webcam{Colors.RESET}")
-        
-        # Set camera properties to the maximum supported resolution and FPS for the system
+            raise IOError(f"Error accessing webcam at index {camera_index}")
+
+        # Query and set the maximum resolution
+        self.set_max_resolution()
+
+    def set_max_resolution(self):
+        """Set the camera to its maximum resolution"""
+        # Query the maximum resolution supported by the camera
         max_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         max_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        max_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, max_width)  # Set to maximum supported width
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, max_height)  # Set to maximum supported height
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size for low latency
-        self.cap.set(cv2.CAP_PROP_FPS, max_fps)  # Set to maximum supported FPS for smooth video
-    
+
+        # Set the resolution
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, max_width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, max_height)
+
+        print(f"Camera resolution set to {max_width}x{max_height}")
+
     def read_frame(self):
         """Read a frame from the camera"""
         return self.cap.read()
-    
+
     def release(self):
-        """Release camera resources"""
-        self.cap.release()
+        """Release the camera resource"""
+        if self.cap:
+            self.cap.release()
 
 # YOLO detector
 class YOLODetector:
@@ -561,10 +567,11 @@ class DetectionSystem:
         
         # Detection tracking
         self.no_detection_count = 0
-        self.NO_DETECTION_THRESHOLD = 3  # Number of consecutive no-detection frames to reset to Normal
+        self.NO_DETECTION_THRESHOLD = 1
 
         # Store the latest frame for sharing
         self.latest_frame = None
+        self.frame_lock = threading.Lock()  # Add a lock for thread-safe access
 
         # Add statistics tracking
         self.start_time = time.time()
@@ -621,7 +628,8 @@ class DetectionSystem:
                 self.frames_processed += 1
 
                 # Store the latest frame for sharing
-                self.latest_frame = frame.copy()
+                with self.frame_lock:
+                    self.latest_frame = frame.copy()
 
                 current_time = time.time()
                 
@@ -651,7 +659,7 @@ class DetectionSystem:
                     if (self.config_manager.is_detection_enabled("fire") or 
                         self.config_manager.is_detection_enabled("smoke")):
                         # Resize for better performance with YOLO
-                        frame_resized = cv2.resize(frame, (process_width, process_height))
+                        frame_resized = cv2.resize(frame, (640, 480))  # Adjust resolution as needed
                         fire_detected, smoke_detected = self.process_object_detection(frame_resized, frame)
                     
                     # Reset to normal if no detections
@@ -973,8 +981,12 @@ class DetectionSystem:
         return self.telegram_service.send_test_message()
 
     def get_latest_frame(self):
-        """Get the latest frame captured by the camera"""
-        return self.latest_frame
+        """Get the latest frame captured by the camera."""
+        with self.frame_lock:
+            if self.latest_frame is not None:
+                return self.latest_frame.copy()  # Return a copy to avoid external modification
+            else:
+                return None
 
     def get_statistics(self):
         """Get system statistics including uptime and frames processed"""

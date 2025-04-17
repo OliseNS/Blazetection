@@ -229,8 +229,9 @@
             width: 100%;
             height: 400px;
             background-color: #000;
-            border-radius: var(--border-radius-sm);
             overflow: hidden;
+            border-bottom-left-radius: var(--border-radius-sm);
+            border-bottom-right-radius: var(--border-radius-sm);
         }
         
         .live-camera-feed {
@@ -813,8 +814,8 @@
                     </div>
                     <div class="card-body" style="padding: 0;">
                         <div class="video-container">
-                            <img id="live-feed" class="live-camera-feed" src="/video_feed" alt="Live Camera Feed">
-                            <button id="fullscreen-btn" class="fullscreen-button" title="Toggle Fullscreen">
+                            <img id="live-feed" class="live-camera-feed" src="{{ url_for('video_feed') }}" alt="Live camera feed">
+                            <button id="fullscreen-btn" class="fullscreen-button" title="Enter fullscreen mode">
                                 <i class="fas fa-expand"></i>
                             </button>
                         </div>
@@ -946,11 +947,11 @@
                         </div>
                         <div class="form-group">
                             <label for="telegram-token">Bot Token</label>
-                            <input type="text" id="telegram-token" placeholder="Enter Telegram bot token">
+                            <input type="password" id="telegram-token" placeholder="Enter Telegram bot token">
                         </div>
                         <div class="form-group">
                             <label for="telegram-chat-id">Chat ID</label>
-                            <input type="text" id="telegram-chat-id" placeholder="Enter Telegram chat ID">
+                            <input type="password" id="telegram-chat-id" placeholder="Enter Telegram chat ID">
                         </div>
                         <div class="form-group">
                             <label for="telegram-cooldown">Cooldown (seconds)</label>
