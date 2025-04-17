@@ -23,6 +23,7 @@ const motionStatus = document.getElementById('motionStatus');
 const videoFeed = document.getElementById('live-feed');
 const frameCount = document.getElementById('frames-processed');
 const statusSummary = document.getElementById('current-status');
+const detectionGallery = document.getElementById('detection-gallery');
 
 // Configuration and Status
 let config = {};
@@ -120,12 +121,14 @@ function initDashboard() {
     fetchConfig();
     fetchStatus();
     fetchFaces();
+    fetchDetections();
     setupEventListeners();
     setupVideoFullscreen();
     fetchStatistics();
 
     setInterval(fetchStatus, 3000);
     setInterval(fetchFaces, 10000);
+    setInterval(fetchDetections, 10000);
     setInterval(fetchStatistics, 5000);
 }
 
@@ -195,42 +198,136 @@ function updateStatusUI(data) {
     }
 }
 
-// Fetch recent faces from server
+// Improved fetch faces function to handle different response formats
 function fetchFaces() {
     fetch('/api/faces')
         .then((response) => response.json())
         .then((data) => {
-            updateFacesGallery(data.faces);
+            // Check if data is in expected format
+            let faces = [];
+            if (data.faces && Array.isArray(data.faces)) {
+                faces = data.faces;
+            } else if (Array.isArray(data)) {
+                faces = data;
+            }
+            
+            // Debug log
+            console.log('Faces data:', faces);
+            
+            updateFaceGallery(faces);
         })
-        .catch((error) => console.error('Error fetching faces:', error));
+        .catch((error) => {
+            console.error('Error fetching faces:', error);
+            document.getElementById('faces-gallery').innerHTML = 
+                '<div class="no-faces">Error loading faces</div>';
+        });
 }
 
-// Update faces gallery
-function updateFacesGallery(faces) {
+// Simplified face gallery update - modify to work with filenames
+function updateFaceGallery(faces) {
+    const gallery = document.getElementById('faces-gallery');
+    
     if (!faces || faces.length === 0) {
-        facesGallery.innerHTML = '<div class="no-faces">No faces detected yet</div>';
+        gallery.innerHTML = '<div class="no-faces">No faces detected yet</div>';
         return;
     }
-
-    const maxFaces = 12;
-    const limitedFaces = faces.slice(0, maxFaces);
-
-    let galleryHTML = '';
-    limitedFaces.forEach((face) => {
-        const timestamp = face.replace('face_', '').replace('.jpg', '');
-        galleryHTML += `
-            <div class="face-item" onclick="openModal('/faces/${face}')">
-                <img src="/faces/${face}" alt="Detected Face" loading="lazy">
-                <div class="face-timestamp">ID: ${timestamp}</div>
-            </div>
+    
+    gallery.innerHTML = '';
+    faces.forEach((face) => {
+        const faceTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const faceItem = document.createElement('div');
+        faceItem.className = 'face-item';
+        
+        // Construct the image URL from the filename
+        const imageUrl = `/faces/${face}`;
+        
+        faceItem.innerHTML = `
+            <img src="${imageUrl}" alt="Face">
+            <div class="face-timestamp">${faceTime}</div>
         `;
+        
+        // Add click event for modal
+        faceItem.addEventListener('click', () => {
+            const modal = document.getElementById('face-modal');
+            const modalImg = document.getElementById('modal-image');
+            modal.style.display = 'flex';
+            modalImg.src = imageUrl;
+        });
+        
+        gallery.appendChild(faceItem);
     });
+}
 
-    if (faces.length > maxFaces) {
-        galleryHTML += `<div class="no-faces">+ ${faces.length - maxFaces} more faces</div>`;
+// Fetch recent detections from the server
+function fetchDetections() {
+    fetch('/api/detections')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && Array.isArray(data.detections)) {
+                updateDetectionGallery(data.detections);
+            } else {
+                console.warn('Invalid detections data format:', data);
+                updateDetectionGallery([]);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching detections:', error);
+            if (detectionGallery) {
+                detectionGallery.innerHTML = '<div class="no-detections">Error loading detections</div>';
+            }
+        });
+}
+
+// Simplified detection gallery - only show time, fix image path
+function updateDetectionGallery(detections) {
+    const gallery = document.getElementById('detection-gallery');
+    
+    if (!detections || detections.length === 0) {
+        gallery.innerHTML = '<div class="no-detections">No recent detections</div>';
+        return;
     }
+    
+    gallery.innerHTML = '';
+    detections.forEach(filename => {
+        // Get current time for display
+        const currentTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        const detectionItem = document.createElement('div');
+        detectionItem.className = 'detection-item';
+        
+        // Construct proper image URL from filename
+        const imageUrl = `/detections/${filename}`;
+        
+        detectionItem.innerHTML = `
+            <img src="${imageUrl}" alt="Detection">
+            <div class="detection-timestamp">${currentTime}</div>
+        `;
+        
+        // Add click event for modal
+        detectionItem.addEventListener('click', () => {
+            openDetectionModal(imageUrl);
+        });
+        
+        gallery.appendChild(detectionItem);
+    });
+}
 
-    facesGallery.innerHTML = galleryHTML;
+// Helper function to format time only
+function formatTime() {
+    const now = new Date();
+    let hours = now.getHours();
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    hours = hours % 12;
+    hours = hours ? hours : 12; // Convert 0 to 12 for 12 AM
+    
+    return `${hours}:${minutes} ${ampm}`;
 }
 
 // Open modal with expanded face image
@@ -239,10 +336,48 @@ function openModal(imageSrc) {
     faceModal.style.display = 'flex';
 }
 
+// Open modal with expanded detection image
+function openDetectionModal(imageSrc) {
+    console.log('Opening detection modal with image:', imageSrc);
+    const modalImage = document.getElementById('modal-image');
+    const faceModal = document.getElementById('face-modal');
+    
+    if (!modalImage || !faceModal) {
+        console.error('Modal elements not found!');
+        return;
+    }
+    
+    modalImage.src = imageSrc;
+    faceModal.style.display = 'flex';
+}
+
 // Close modal
 function closeModalFunc() {
-    faceModal.style.display = 'none';
+    const faceModal = document.getElementById('face-modal');
+    if (faceModal) {
+        faceModal.style.display = 'none';
+    }
 }
+
+// Ensure event listeners for modal close functionality are set up
+document.addEventListener('DOMContentLoaded', () => {
+    const closeModal = document.getElementById('close-modal');
+    const faceModal = document.getElementById('face-modal');
+
+    if (closeModal) {
+        closeModal.addEventListener('click', closeModalFunc);
+    }
+
+    if (faceModal) {
+        window.addEventListener('click', (event) => {
+            if (event.target === faceModal) closeModalFunc();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && faceModal.style.display === 'flex') closeModalFunc();
+        });
+    }
+});
 
 // Set up event listeners for UI interactions
 function setupEventListeners() {

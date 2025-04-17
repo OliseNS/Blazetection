@@ -1,6 +1,6 @@
 {
   "detection": {
-    "fire": false,
+    "fire": true,
     "smoke": true,
     "motion": true,
     "face": true
