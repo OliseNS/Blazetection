@@ -17,6 +17,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 import pyaudio
 import numpy as np
 import struct
+import subprocess
 
 # ANSI color codes for terminal output
 class Colors:
@@ -56,7 +57,7 @@ class ConfigManager:
                         "enabled": False,
                         "token": "",
                         "chat_id": "",
-                        "cooldown": 30
+                        "cooldown": 30,
                     },
                     "system": {
                         "camera_index": 0,
@@ -133,20 +134,29 @@ class TelegramService:
     Service for sending notifications and images to Telegram
     """
     def __init__(self, config_manager):
+        # Existing initialization
         self.config_manager = config_manager
         self.config = config_manager.get_config()
         self.bot = None
         self.last_notification_time = {}  # Track last notification time by type
+        self.last_global_notification_time = 0  # Global cooldown tracker
         self.setup_bot()
         
     def reload_config(self):
         """Reload configuration and update bot if needed"""
         old_config = self.config
-        self.config = self.config_manager.get_config()
+        new_config = self.config_manager.get_config()
         
-        # If token changed, reinitialize the bot
-        if old_config["telegram"]["token"] != self.config["telegram"]["token"]:
+        # Only set up the bot if the configuration has actually changed
+        if (old_config["telegram"]["enabled"] != new_config["telegram"]["enabled"] or
+            old_config["telegram"]["token"] != new_config["telegram"]["token"] or
+            old_config["telegram"]["chat_id"] != new_config["telegram"]["chat_id"]):
+            self.config = new_config
             self.setup_bot()
+            print(f"Telegram configuration reloaded. Enabled: {self.is_enabled()}")
+        else:
+            # Just update cooldown without bot recreation
+            self.config = new_config
     
     def setup_bot(self):
         """Initialize Telegram bot with current configuration"""
@@ -169,41 +179,39 @@ class TelegramService:
     
     def can_send_notification(self, notification_type):
         """
-        Check if a notification can be sent based on cooldown period
+        Check if a notification can be sent for this type, using the shared cooldown value
+        but tracking last sent time per type.
         """
         if not self.is_enabled():
             print(f"Telegram notifications not enabled")
             return False
-            
+
         current_time = time.time()
         cooldown = self.config["telegram"]["cooldown"]
-        
-        # If this type hasn't been sent before or cooldown has passed
-        if (notification_type not in self.last_notification_time or
-                current_time - self.last_notification_time[notification_type] >= cooldown):
+
+        # Only check per-type cooldown, not global
+        last_time = self.last_notification_time.get(notification_type, 0)
+        if current_time - last_time >= cooldown:
             return True
-            
+
         print(f"Telegram notification on cooldown for type: {notification_type}. " +
-              f"Next notification in {cooldown - (current_time - self.last_notification_time[notification_type]):.1f} seconds")
+              f"Next notification in {cooldown - (current_time - last_time):.1f} seconds")
         return False
     
     async def send_notification_async(self, message, image_path=None, notification_type="general"):
         """
         Send a notification message and optionally an image to Telegram using asyncio
         """
-        if not self.is_enabled():
-            print(f"Telegram notifications not enabled")
+        if not self.is_enabled() or not self.can_send_notification(notification_type):
             return False
             
-        if not self.can_send_notification(notification_type):
-            return False
-            
-        # Update last notification time for this type
-        self.last_notification_time[notification_type] = time.time()
+        # Update last notification times
+        current_time = time.time()
+        self.last_notification_time[notification_type] = current_time
+        self.last_global_notification_time = current_time
         
         try:
             chat_id = self.config["telegram"]["chat_id"]
-
             
             # First send the message with image if provided
             if image_path and os.path.exists(image_path):
@@ -225,22 +233,46 @@ class TelegramService:
             return True
         except Exception as e:
             print(f"Error sending Telegram notification: {str(e)}")
+            # Force re-initialization of the bot on error
+            self.setup_bot()
             return False
     
     def send_notification(self, message, image_path=None, notification_type="general"):
         """
-        Non-async wrapper for send_notification_async
+        Non-async wrapper for send_notification_async that doesn't block
         """
+        print(f"Queuing {notification_type} notification via Telegram")
+        
+        # Make sure we have the latest config, but only if needed
+        if not self.is_enabled():
+            # First quick check without reloading
+            self.reload_config()  # Only reload if current config shows disabled
+            if not self.is_enabled():
+                print(f"Telegram is not properly configured or enabled")
+                return False
+        
+        # Create and start a thread for sending the notification
+        telegram_thread = threading.Thread(
+            target=self._send_notification_thread,
+            args=(message, image_path, notification_type),
+            daemon=True
+        )
+        telegram_thread.start()
+        return True  # Return immediately, notification sent asynchronously
+    
+    def _send_notification_thread(self, message, image_path, notification_type):
+        """Thread function to handle the async notification without blocking"""
         # Create a new event loop for this thread
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         try:
             # Run the async function in the new loop
-            result = loop.run_until_complete(
+            loop.run_until_complete(
                 self.send_notification_async(message, image_path, notification_type)
             )
-            return result
+        except Exception as e:
+            print(f"Exception in Telegram notification thread: {str(e)}")
         finally:
             # Close the loop
             loop.close()
@@ -258,12 +290,6 @@ class TelegramService:
         message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
         print(f"Sending smoke alert with image: {image_path}")
         return self.send_notification(message, image_path, "smoke")
-    
-    def send_person_alert(self, image_path=None):
-        """Send person detection alert"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👤 PERSON DETECTED! 👤\nTimestamp: {timestamp}"
-        return self.send_notification(message, image_path, "person")
     
     def send_face_alert(self, image_path=None):
         """Send face detection alert"""
@@ -291,11 +317,15 @@ class Camera:
         if not self.cap.isOpened():
             raise IOError(f"{Colors.RED}Error accessing webcam{Colors.RESET}")
         
-        # Set camera properties for better performance on Pi
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        self.cap.set(cv2.CAP_PROP_FPS, 50)  # Lower FPS for Pi
+        # Set camera properties to the maximum supported resolution and FPS for the system
+        max_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        max_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        max_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+        
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, max_width)  # Set to maximum supported width
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, max_height)  # Set to maximum supported height
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size for low latency
+        self.cap.set(cv2.CAP_PROP_FPS, max_fps)  # Set to maximum supported FPS for smooth video
     
     def read_frame(self):
         """Read a frame from the camera"""
@@ -344,7 +374,7 @@ class FaceDetector:
         self.mp_face = mp.solutions.face_detection
         self.face_detection = self.mp_face.FaceDetection(
             min_detection_confidence=min_detection_confidence,
-            model_selection=0  # Use lightweight model for Pi
+            model_selection=1  # Use lightweight model for Pi
         )
     
     def detect(self, frame_rgb):
@@ -355,14 +385,20 @@ class FaceDetector:
 # Motion detector
 class MotionDetector:
     def __init__(self):
-        """Initialize motion detector"""
-        self.fgbg = cv2.createBackgroundSubtractorMOG2()
+        """Initialize motion detector with better memory and performance"""
+        self.fgbg = cv2.createBackgroundSubtractorMOG2(history=100, varThreshold=25)
         self.min_area = 1000  # Minimum area to trigger motion detection
+        self.last_motion_time = 0
+        self.motion_cooldown = 2.0  # Time in seconds before motion is considered gone
         
     def detect(self, frame):
-        """Detect motion in frame"""
+        """Detect motion in frame with automatic cooldown"""
+        current_time = time.time()
+        
         # Apply background subtraction
-        fgmask = self.fgbg.apply(frame)
+        # Convert to grayscale for better performance
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        fgmask = self.fgbg.apply(gray)
         
         # Apply thresholding to remove noise
         thresh = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY)[1]
@@ -371,11 +407,15 @@ class MotionDetector:
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         # Check for significant motion
+        motion_detected = False
         for contour in contours:
             if cv2.contourArea(contour) > self.min_area:
-                return True
+                motion_detected = True
+                self.last_motion_time = current_time
+                break
                 
-        return False
+        # Return true if motion was detected recently (within cooldown period)
+        return motion_detected or (current_time - self.last_motion_time < self.motion_cooldown)
 
 class SineWaveAlarm:
     def __init__(self):
@@ -525,6 +565,10 @@ class DetectionSystem:
 
         # Store the latest frame for sharing
         self.latest_frame = None
+
+        # Add statistics tracking
+        self.start_time = time.time()
+        self.frames_processed = 0
         
     def cleanup_old_images(self):
         try:
@@ -547,137 +591,144 @@ class DetectionSystem:
         self.FACE_SAVE_INTERVAL = self.config["system"]["face_save_interval"]
         self.ALARM_THRESHOLD = self.config["system"]["alarm_threshold"]
         
-        # Reload Telegram service config
+        # Explicitly reload Telegram service config and reinitialize the bot
         self.telegram_service.reload_config()
         
-        print(f"{Colors.CYAN}Configuration updated{Colors.RESET}")
+        print(f"{Colors.CYAN}Configuration updated. Telegram status: {self.telegram_service.is_enabled()}{Colors.RESET}")
     
     def run(self):
-        """Main loop for the detection system"""
         self.running = True
         print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
         
+        # Lower resolution for processing to improve performance
+        process_width = 224  # Match the YOLO model's input size for optimal performance
+        process_height = 224
+        
+        # Adaptive timing variables
+        processing_times = []
+        max_processing_times = 10  # Number of times to average
+        
         try:
             while self.running:
+                start_time = time.time()
                 success, frame = self.camera.read_frame()
                 if not success:
                     print(f"{Colors.RED}Error reading frame from camera{Colors.RESET}")
-                    time.sleep(1)  # Wait a bit before trying again
+                    time.sleep(0.5)  # Reduced wait time
                     continue
                 
+                # Increment frames processed
+                self.frames_processed += 1
+
                 # Store the latest frame for sharing
                 self.latest_frame = frame.copy()
 
                 current_time = time.time()
-                process_frame = current_time - self.last_detection_time >= self.DETECTION_INTERVAL
                 
-                if process_frame:
+                # Process every frame but use a simplified processing pipeline when under high load
+                process_full = current_time - self.last_detection_time >= self.DETECTION_INTERVAL
+                
+                if process_full:
                     self.last_detection_time = current_time
-                    # No need to resize, we're already capturing at 320x240
+                    # Full processing pipeline
+                    
+                    # Convert to RGB for MediaPipe (face detection)
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     
-                    # Track if any detection happened in this frame
-                    any_detection = False
-                    
-                    # Process with all detectors based on configuration
-                    if self.config["detection"]["fire"] or self.config["detection"]["smoke"]:
-                        fire_detected, smoke_detected = self.process_object_detection(frame)
-                        if fire_detected or smoke_detected:
-                            any_detection = True
-                    
-                    if self.config["detection"]["motion"]:
+                    # Process with motion detection
+                    motion_detected = False
+                    if self.config_manager.is_detection_enabled("motion"):
                         motion_detected = self.process_motion_detection(frame)
-                        if motion_detected:
-                            any_detection = True
                     
-                    # Process face detection on a different interval
-                    if self.config["detection"]["face"] and current_time - self.last_face_save_time >= self.FACE_SAVE_INTERVAL:
-                        self.last_face_save_time = current_time
+                    # Process with face detection
+                    face_detected = False
+                    if self.config_manager.is_detection_enabled("face"):
                         face_detected = self.process_face_detection(frame, frame_rgb)
-                        if face_detected:
-                            any_detection = True
                     
-                    # Update status based on detection results
-                    if not any_detection:
+                    # Process with object detection (fire/smoke)
+                    fire_detected = False
+                    smoke_detected = False
+                    if (self.config_manager.is_detection_enabled("fire") or 
+                        self.config_manager.is_detection_enabled("smoke")):
+                        # Resize for better performance with YOLO
+                        frame_resized = cv2.resize(frame, (process_width, process_height))
+                        fire_detected, smoke_detected = self.process_object_detection(frame_resized, frame)
+                    
+                    # Reset to normal if no detections
+                    if not (fire_detected or smoke_detected or motion_detected or face_detected):
                         self.no_detection_count += 1
-                        if self.no_detection_count >= self.NO_DETECTION_THRESHOLD:
-                            # Reset status to Normal after several consecutive no-detection frames
-                            if self.system_status != "Normal":
-                                print(f"{Colors.GREEN}No detections for {self.no_detection_count} consecutive frames. Setting status to Normal.{Colors.RESET}")
-                                self.system_status = "Normal"
-                                # Clear last detections
-                                self.last_detections = {
-                                    "fire": None,
-                                    "smoke": None,
-                                    "motion": None,
-                                    "face": None
-                                }
+                        if (self.no_detection_count > self.NO_DETECTION_THRESHOLD and 
+                            self.system_status != "Normal" and 
+                            not self.alarm_playing):
+                            self.system_status = "Normal"
+                            print(f"{Colors.GREEN}No detections, status reset to Normal{Colors.RESET}")
                     else:
-                        # Reset no detection counter if something was detected
                         self.no_detection_count = 0
                 
-                # Sleep longer to reduce CPU usage on Pi
-                time.sleep(0.2)  
+                # Adaptive sleep based on processing time
+                processing_time = time.time() - start_time
+                processing_times.append(processing_time)
+                if len(processing_times) > max_processing_times:
+                    processing_times.pop(0)
                 
+                avg_processing_time = sum(processing_times) / len(processing_times)
+                sleep_time = max(0.01, self.DETECTION_INTERVAL/2 - avg_processing_time)
+                
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
         except KeyboardInterrupt:
             print(f"\n{Colors.YELLOW}Exiting program...{Colors.RESET}")
         finally:
             self.shutdown()
     
-    def process_object_detection(self, frame):
-        """Process frame with YOLO object detector with enhanced styled bounding boxes and alarm state"""
-        detected_objects = self.object_detector.detect(frame)
-        
+    def process_object_detection(self, frame_resized, frame_original):
+        detected_objects = self.object_detector.detect(frame_resized)
         fire_detected = False
         smoke_detected = False
 
         if detected_objects and len(detected_objects) > 0:
             classes = detected_objects.cls.tolist()
             confidences = detected_objects.conf.tolist()
-            
             print(f"{Colors.GREEN}[{datetime.now().strftime('%H:%M:%S')}] YOLO detected {len(classes)} object(s):{Colors.RESET}")
-            
-            # Create a copy of the frame for saving detections
-            detection_frame = frame.copy()
-            
+
+            # Draw boxes on the original high-res frame
+            detection_frame = frame_original.copy()
+
             for i, (cls, conf) in enumerate(zip(classes, confidences)):
                 label = ""
-                box_color = (0, 255, 0)  # Default color
-
+                box_color = (0, 255, 0)
                 if cls == 0 and self.config["detection"]["fire"]:
                     label = f"FIRE Detected"
-                    box_color = (0, 0, 255)  
+                    box_color = (0, 0, 255)
                     fire_detected = True
                 elif cls == 1 and self.config["detection"]["smoke"]:
                     label = f"SMOKE Detected"
                     box_color = (0, 0, 255)
                     smoke_detected = True
-                
-                print(f"  - {label}")
 
                 box = detected_objects[i]
+                # Scale bounding box from resized to original frame
                 x1, y1, x2, y2 = [int(val) for val in box.xyxy[0].tolist()]
+                scale_x = frame_original.shape[1] / frame_resized.shape[1]
+                scale_y = frame_original.shape[0] / frame_resized.shape[0]
+                x1 = int(x1 * scale_x)
+                x2 = int(x2 * scale_x)
+                y1 = int(y1 * scale_y)
+                y2 = int(y2 * scale_y)
 
-                # Draw simple bounding box (optimized for Pi)
                 cv2.rectangle(detection_frame, (x1, y1), (x2, y2), box_color, 2)
                 cv2.putText(detection_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 1)
 
-            # Save detection image only if fire or smoke is detected
             if fire_detected or smoke_detected:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 detection_filename = f"detections/detection_{timestamp}.jpg"
                 cv2.imwrite(detection_filename, detection_frame)
                 print(f"  {Colors.CYAN}Saved detection image: {detection_filename}{Colors.RESET}")
-
-                # Update alarm state with the saved image path
                 self.update_alarm_state(fire_detected, smoke_detected, detection_filename)
             else:
-                # No fire or smoke detected, update alarm state without image
                 self.update_alarm_state(False, False)
         else:
-            # No objects detected, update alarm state
             self.update_alarm_state(False, False)
-            
         return fire_detected, smoke_detected
     
     def process_motion_detection(self, frame):
@@ -730,6 +781,8 @@ class DetectionSystem:
                 if not is_duplicate and face_roi is not None and face_roi.size > 0:
                     face_filename = f"faces/face_{self.face_count}.jpg"
                     cv2.imwrite(face_filename, face_roi)
+                    self.telegram_service.send_face_alert(face_filename)
+                    
                     print(f"  {Colors.MAGENTA}Saved face {detection_idx+1}: {face_filename}{Colors.RESET}")
                     
                     # Update status
@@ -742,9 +795,6 @@ class DetectionSystem:
                     self.recent_faces.insert(0, filename)
                     if len(self.recent_faces) > self.max_recent_faces:
                         self.recent_faces = self.recent_faces[:self.max_recent_faces]
-                    
-                    # Send Telegram notification if enabled
-                    self.telegram_service.send_face_alert(face_filename)
                     
                     self.face_count += 1
                     self.tracked_faces.append(face_center)
@@ -820,31 +870,54 @@ class DetectionSystem:
     
     def update_alarm_state(self, fire, smoke, image_path=None):
         """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
+        # Track when the last fire/smoke was detected
+        if not hasattr(self, 'last_fire_smoke_time'):
+            self.last_fire_smoke_time = 0
+            
         if fire and self.config["detection"]["fire"]:
             self.fire_persistence_count += 1
+            self.last_fire_smoke_time = time.time()  # Update the timestamp when fire is detected
             if self.fire_persistence_count == self.ALARM_THRESHOLD:
                 self.system_status = "FIRE DETECTED!"
                 self.last_detections["fire"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.telegram_service.send_fire_alert(image_path)
+                
+                # Try to send notification, ensure latest config is used
+                success = self.telegram_service.send_fire_alert(image_path)
+                print(f"Fire alert notification sent: {success}")
+                
                 self.play_alarm_sound()
         else:
             self.fire_persistence_count = max(0, self.fire_persistence_count - 1)
 
         if smoke and self.config["detection"]["smoke"]:
             self.smoke_persistence_count += 1
+            self.last_fire_smoke_time = time.time()  # Update the timestamp when smoke is detected
             if self.smoke_persistence_count == self.ALARM_THRESHOLD:
                 self.system_status = "SMOKE DETECTED!"
                 self.last_detections["smoke"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.telegram_service.send_smoke_alert(image_path)
+                
+                # Try to send notification, ensure latest config is used
+                success = self.telegram_service.send_smoke_alert(image_path)
+                print(f"Smoke alert notification sent: {success}")
+                
                 self.play_alarm_sound()
         else:
             self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)
 
-        # Stop alarm if no fire or smoke is being detected
-        if (self.fire_persistence_count < self.ALARM_THRESHOLD and 
-            self.smoke_persistence_count < self.ALARM_THRESHOLD and 
-            self.alarm_playing):
+        # Stop alarm if no fire or smoke has been detected for 3 seconds
+        current_time = time.time()
+        if (self.alarm_playing and 
+            not (fire or smoke) and
+            current_time - self.last_fire_smoke_time >= 3.0):
+            print(f"{Colors.GREEN}No fire/smoke detected for 3 seconds, stopping alarm{Colors.RESET}")
             self.stop_alarm()
+
+        # Handle pre-alarm status changes if alarm isn't already triggered
+        if (not self.alarm_playing and 
+            (self.fire_persistence_count < self.ALARM_THRESHOLD and 
+             self.smoke_persistence_count < self.ALARM_THRESHOLD)):
+            self.alarm_triggered = False
+            self.pre_alarm_logged = False
 
     def play_alarm_sound(self):
         """Play alarm sound in a thread-safe manner with short beep cycles"""
@@ -920,6 +993,22 @@ class DetectionSystem:
     def get_latest_frame(self):
         """Get the latest frame captured by the camera"""
         return self.latest_frame
+
+    def get_statistics(self):
+        """Get system statistics including uptime and frames processed"""
+        current_time = time.time()
+        uptime_seconds = int(current_time - self.start_time)
+        
+        # Calculate hours, minutes, seconds
+        hours, remainder = divmod(uptime_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        uptime_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        return {
+            "uptime": uptime_formatted,
+            "frames_processed": self.frames_processed
+        }
 
 # Create a global detection system instance
 detection_system = None

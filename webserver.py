@@ -1,10 +1,10 @@
-import cv2
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
 import threading
 import time
 from datetime import datetime
 import pyttsx3
+import queue
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -19,8 +19,30 @@ detection_system = init_detection_system()
 
 # Initialize pyttsx3 engine with custom settings
 tts_engine = pyttsx3.init()
-tts_engine.setProperty('rate', 130)
-tts_engine.setProperty('volume', 0.7)
+tts_engine.setProperty('rate', 150)
+tts_engine.setProperty('volume', 0.9)
+
+# Create a queue for TTS requests
+tts_queue = queue.Queue()
+
+# Function to process TTS requests from the queue
+def process_tts_queue():
+    while True:
+        text = tts_queue.get()  # Get the next text from the queue
+        if text is None:  # Exit signal
+            break
+        try:
+            # Ensure the TTS engine processes the entire text
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception as e:
+            print(f"TTS Processing Error: {str(e)}")
+        finally:
+            tts_queue.task_done()  # Mark the task as done
+
+# Start a background thread to process the TTS queue
+tts_thread = threading.Thread(target=process_tts_queue, daemon=True)
+tts_thread.start()
 
 # Start detection system in a separate thread
 detection_thread = None
@@ -37,31 +59,30 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    """Update configuration"""
     try:
         data = request.json
         section = data.get('section')
         values = data.get('values')
-        
-        if section and values:
-            success = detection_system.config_manager.update_section(section, values)
-            return jsonify({"success": success})
-        else:
-            return jsonify({"success": False, "error": "Missing section or values"})
+        detection_system.config_manager.update_section(section, values)  # Ensure this is implemented
+        return jsonify({"success": True}), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    """Get current system status"""
-    return jsonify(detection_system.get_status())
+    try:
+        status = detection_system.system_status  # Ensure this is implemented
+        return jsonify({"status": status}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/faces', methods=['GET'])
 def get_faces():
-    """Get list of recent faces"""
-    return jsonify({
-        "faces": detection_system.get_faces()
-    })
+    try:
+        faces = detection_system.get_faces()  # Ensure this is implemented
+        return jsonify({"faces": faces}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/alarm/stop', methods=['POST'])
 def stop_alarm():
@@ -85,28 +106,29 @@ def test_telegram():
 
 @app.route('/api/tts', methods=['POST'])
 def text_to_speech():
-    """Convert text to speech using pyttsx3"""
+    """Convert text to speech using pyttsx3 with a queue"""
     try:
         data = request.json
         text = data.get('text', '')
-        
+
         if not text:
             return jsonify({"success": False, "error": "No text provided"})
-        
-        # Use a completely new process for TTS to avoid threading issues
-        def speak_text():
-            try:
-                os.system(f'python -c "import pyttsx3; engine = pyttsx3.init(); engine.say(\'{text}\'); engine.runAndWait()"')
-            except Exception as e:
-                print(f"TTS subprocess error: {str(e)}")
-        
-        # Run in a separate thread to not block the API response
-        threading.Thread(target=speak_text).start()
-        
-        return jsonify({"success": True})
+
+        # Add the text to the TTS queue
+        tts_queue.put(text)
+
+        return jsonify({"success": True, "message": "Text added to TTS queue"})
     except Exception as e:
         print(f"TTS Error: {str(e)}")  # Log the error
         return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/statistics', methods=['GET'])
+def get_statistics():
+    try:
+        stats = detection_system.get_statistics()  # Ensure this is implemented
+        return jsonify(stats), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/faces/<path:filename>')
 def serve_face(filename):
@@ -117,53 +139,6 @@ def serve_face(filename):
 def serve_detection(filename):
     """Serve detection images"""
     return send_from_directory('detections', filename)
-
-@app.route('/video_feed')
-def video_feed():
-    """Video streaming route. Returns a multipart/x-mixed-replace response with JPEG frames."""
-    def generate():
-        frame_interval = 0.02  # Target FPS (adjust as needed)
-        last_frame_time = 0
-        
-        while True:
-            current_time = time.time()
-            elapsed = current_time - last_frame_time
-            
-            # Control frame rate
-            if elapsed < frame_interval:
-                # Wait until it's time for the next frame
-                time.sleep(max(0, frame_interval - elapsed))
-                continue
-                
-            last_frame_time = current_time
-            
-            if detection_system is not None:
-                frame = detection_system.get_latest_frame()
-                if frame is not None:
-                    # Reduce size for efficiency - scale down to 50% of original size
-                    frame_resized = cv2.resize(frame, (0, 0), fx=1, fy=1)
-                    
-                    # Encode frame as JPEG with reduced quality for better performance
-                    ret, jpeg = cv2.imencode('.jpg', frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 100])
-                    if ret:
-                        yield (b'--frame\r\n'
-                               b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
-                else:
-                    # No frame available, add a small delay to avoid CPU spinning
-                    time.sleep(0.1)
-            else:
-                # No detection system, add a small delay
-                time.sleep(0.1)
-
-    response = Response(generate(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
-    
-    # Add Cache-Control headers to prevent browser buffering
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    
-    return response
 
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""

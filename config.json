@@ -1,14 +1,14 @@
 {
   "detection": {
-    "fire": true,
+    "fire": false,
     "smoke": true,
     "motion": true,
     "face": true
   },
   "telegram": {
     "enabled": true,
-    "token": "",
-    "chat_id": "",
+    "token": "7617318916:AAEkSQv3jGwcKbARlDVuMby550LoepoKjto",
+    "chat_id": "1946046256",
     "cooldown": 30
   },
   "system": {
