@@ -351,32 +351,12 @@ class YOLODetector:
     
     def detect(self, frame):
         """Detect objects in frame using YOLO"""
-        # Use 320x320 image size for better performance on Pi
         results = self.model.predict(frame, imgsz=224, conf=self.CONF_THRESHOLD, iou=self.IOU_THRESHOLD)
         return results[0].boxes
 
-# Pose detector
-class PoseDetector:
-    def __init__(self, min_detection_confidence=0.8, min_tracking_confidence=0.8):
-        """Initialize MediaPipe pose detector"""
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
-            min_detection_confidence=min_detection_confidence,
-            min_tracking_confidence=min_tracking_confidence,
-            model_complexity=0  # Use lightweight model for Pi
-        )
-    
-    def detect(self, frame_rgb):
-        """Detect poses in frame"""
-        # Provide image dimensions explicitly
-        height, width, _ = frame_rgb.shape
-        results = self.pose.process(frame_rgb)
-        return results
-
 # Face detector
 class FaceDetector:
-    def __init__(self, min_detection_confidence=0.97):  # High threshold to reduce false positives
-        """Initialize MediaPipe face detector"""
+    def __init__(self, min_detection_confidence=0.97):  
         self.mp_face = mp.solutions.face_detection
         self.face_detection = self.mp_face.FaceDetection(
             min_detection_confidence=min_detection_confidence,
@@ -438,7 +418,7 @@ class SineWaveAlarm:
             
             # Find a valid output device
             self.device_index = None
-            for i in range(device_count):
+            for i in range(device_count): # Iterate over a range of device indices
                 device_info = self.p.get_device_info_by_index(i)
                 if device_info['maxOutputChannels'] > 0:
                     self.device_index = i
@@ -699,19 +679,16 @@ class DetectionSystem:
             confidences = detected_objects.conf.tolist()
             print(f"{Colors.GREEN}[{datetime.now().strftime('%H:%M:%S')}] YOLO detected {len(classes)} object(s):{Colors.RESET}")
 
-            # Draw boxes on the original high-res frame
-            detection_frame = frame_original.copy()
-
             for i, (cls, conf) in enumerate(zip(classes, confidences)):
                 label = ""
                 box_color = (0, 255, 0)
                 if cls == 0 and self.config["detection"]["fire"]:
-                    label = f"FIRE Detected"
-                    box_color = (0, 0, 255)
+                    label = f"FIRE"
+                    box_color = (0, 0, 255)  # Red for fire
                     fire_detected = True
                 elif cls == 1 and self.config["detection"]["smoke"]:
-                    label = f"SMOKE Detected"
-                    box_color = (0, 0, 255)
+                    label = f"SMOKE"
+                    box_color = (255, 0, 0)  # Blue for smoke
                     smoke_detected = True
 
                 box = detected_objects[i]
@@ -724,17 +701,43 @@ class DetectionSystem:
                 y1 = int(y1 * scale_y)
                 y2 = int(y2 * scale_y)
 
-                cv2.rectangle(detection_frame, (x1, y1), (x2, y2), box_color, 2)
-                cv2.putText(detection_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 1)
+                # Make the bounding box cooler with thicker lines and outline
+                line_thickness = 1
+                outline_color = (255, 255, 255)  # White outline
 
-            if fire_detected or smoke_detected:
+                # Draw outline
+                cv2.rectangle(frame_original, (x1, y1), (x2, y2), outline_color, line_thickness + 2)
+                # Draw main box
+                cv2.rectangle(frame_original, (x1, y1), (x2, y2), box_color, line_thickness)
+
+                # Add text label
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.7
+                text_color = (255, 255, 255)  # White text
+                text_thickness = 2
+                
+                # Get size of label to create a background
+                (text_width, text_height) = cv2.getTextSize(label, font, font_scale, text_thickness)[0]
+                
+                # Make sure the text background is within the image
+                text_x = x1
+                text_y = y1 - text_height - 5
+                if text_y < 0:
+                    text_y = y1 + text_height + 5
+                
+                # Draw a filled rectangle behind the text
+                cv2.rectangle(frame_original, (text_x, text_y - text_height - 5), (text_x + text_width, text_y + 5), box_color, -1)
+
+                # Put the text onto the frame
+                cv2.putText(frame_original, label, (text_x, text_y), font, font_scale, text_color, text_thickness, cv2.LINE_AA)
+
+                # Save the full frame with bounding box
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                detection_filename = f"detections/detection_{timestamp}.jpg"
-                cv2.imwrite(detection_filename, detection_frame)
+                detection_filename = f"detections/{label.lower().replace(' ', '_')}_{timestamp}.jpg"
+                cv2.imwrite(detection_filename, frame_original)
                 print(f"  {Colors.CYAN}Saved detection image: {detection_filename}{Colors.RESET}")
+
                 self.update_alarm_state(fire_detected, smoke_detected, detection_filename)
-            else:
-                self.update_alarm_state(False, False)
         else:
             self.update_alarm_state(False, False)
         return fire_detected, smoke_detected
@@ -777,7 +780,7 @@ class DetectionSystem:
             print(f"{Colors.MAGENTA}[{datetime.now().strftime('%H:%M:%S')}] Found {len(face_detections)} face(s){Colors.RESET}")
             
             for detection_idx, detection in enumerate(face_detections):
-                face_roi, face_center = self.extract_face_roi(original_frame, detection)
+                face_roi, face_center, face_coords = self.extract_face_roi(original_frame, detection)
                 current_faces.append(face_center)
                 
                 is_duplicate = False
@@ -787,8 +790,11 @@ class DetectionSystem:
                         break
                 
                 if not is_duplicate and face_roi is not None and face_roi.size > 0:
+                    # Save the cropped face region at the highest resolution
+                    x1, y1, x2, y2 = face_coords
+                    high_res_face = original_frame[y1:y2, x1:x2]
                     face_filename = f"faces/face_{self.face_count}.jpg"
-                    cv2.imwrite(face_filename, face_roi)
+                    cv2.imwrite(face_filename, high_res_face)
                     self.telegram_service.send_face_alert(face_filename)
                     
                     print(f"  {Colors.MAGENTA}Saved face {detection_idx+1}: {face_filename}{Colors.RESET}")
@@ -815,23 +821,7 @@ class DetectionSystem:
             self.tracked_faces = current_faces + self.tracked_faces[:10]  # Keep fewer faces for Pi
             
         return face_detected
-    
-    def limit_saved_faces(self):
-        """Limit the number of saved face images to prevent disk space issues"""
-        max_saved_faces = self.config["system"]["max_saved_faces"]
-        face_files = sorted([f for f in os.listdir("faces") if f.startswith("face_")], 
-                           key=lambda x: os.path.getmtime(os.path.join("faces", x)))
-        
-        # If we have more than the maximum, delete the oldest ones
-        if len(face_files) > max_saved_faces:
-            files_to_delete = face_files[:(len(face_files) - max_saved_faces)]
-            for file in files_to_delete:
-                try:
-                    os.remove(os.path.join("faces", file))
-                    print(f"{Colors.YELLOW}Removed old face image: {file}{Colors.RESET}")
-                except Exception as e:
-                    print(f"{Colors.RED}Error removing old face image: {str(e)}{Colors.RESET}")
-    
+
     def extract_face_roi(self, frame, detection, scale_factor=1.5):
         """Extract face ROI with additional context"""
         bboxC = detection.location_data.relative_bounding_box
@@ -874,7 +864,23 @@ class DetectionSystem:
         face_center = (center_x, center_y)
         face_roi = frame[y1:y2, x1:x2]
         
-        return face_roi, face_center
+        return face_roi, face_center, (x1, y1, x2, y2)
+    
+    def limit_saved_faces(self):
+        """Limit the number of saved face images to prevent disk space issues"""
+        max_saved_faces = self.config["system"]["max_saved_faces"]
+        face_files = sorted([f for f in os.listdir("faces") if f.startswith("face_")], 
+                           key=lambda x: os.path.getmtime(os.path.join("faces", x)))
+        
+        # If we have more than the maximum, delete the oldest ones
+        if len(face_files) > max_saved_faces:
+            files_to_delete = face_files[:(len(face_files) - max_saved_faces)]
+            for file in files_to_delete:
+                try:
+                    os.remove(os.path.join("faces", file))
+                    print(f"{Colors.YELLOW}Removed old face image: {file}{Colors.RESET}")
+                except Exception as e:
+                    print(f"{Colors.RED}Error removing old face image: {str(e)}{Colors.RESET}")
     
     def update_alarm_state(self, fire, smoke, image_path=None):
         """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
