@@ -9,9 +9,9 @@ import mediapipe as mp
 from scipy.spatial.distance import euclidean
 from datetime import datetime
 import pygame
-import telegram
+from telegram import Bot, InputFile
+from telegram.ext import Application, ApplicationBuilder
 import asyncio
-import telegram 
 import flask
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import pyaudio
@@ -128,185 +128,167 @@ class ConfigManager:
         except:
             return False
 
-# Telegram integration
+
 class TelegramService:
     """
-    Service for sending notifications and images to Telegram
+    Service for sending notifications and images to Telegram.
     """
+
     def __init__(self, config_manager):
-        # Existing initialization
         self.config_manager = config_manager
-        self.config = config_manager.get_config()
-        self.bot = None
+        self.config = self.config_manager.get_config()
+        self.token = self.config["telegram"]["token"]
+        self.chat_id = self.config["telegram"]["chat_id"]
+        self.cooldown = self.config["telegram"]["cooldown"]
         self.last_notification_time = {}  # Track last notification time by type
-        self.last_global_notification_time = 0  # Global cooldown tracker
+        self.application = None
+        self.bot = None
+        self.loop = asyncio.get_event_loop()
         self.setup_bot()
-        
+
     def reload_config(self):
-        """Reload configuration and update bot if needed"""
+        """Reload configuration and update bot if needed."""
         old_config = self.config
-        new_config = self.config_manager.get_config()
-        
-        # Only set up the bot if the configuration has actually changed
-        if (old_config["telegram"]["enabled"] != new_config["telegram"]["enabled"] or
-            old_config["telegram"]["token"] != new_config["telegram"]["token"] or
-            old_config["telegram"]["chat_id"] != new_config["telegram"]["chat_id"]):
-            self.config = new_config
+        self.config = self.config_manager.get_config()
+        if old_config["telegram"]["token"] != self.config["telegram"]["token"]:
+            self.token = self.config["telegram"]["token"]
+            self.chat_id = self.config["telegram"]["chat_id"]
+            self.cooldown = self.config["telegram"]["cooldown"]
             self.setup_bot()
-            print(f"Telegram configuration reloaded. Enabled: {self.is_enabled()}")
-        else:
-            # Just update cooldown without bot recreation
-            self.config = new_config
-    
+
     def setup_bot(self):
-        """Initialize Telegram bot with current configuration"""
-        if not self.config["telegram"]["enabled"] or not self.config["telegram"]["token"]:
+        """Initialize Telegram bot with current configuration."""
+        if not self.config["telegram"]["enabled"] or not self.token:
             self.bot = None
+            self.application = None
             return
-            
+
         try:
-            self.bot = telegram.Bot(token=self.config["telegram"]["token"])
-            print(f"Telegram bot initialized with token: {self.config['telegram']['token'][:5]}...")
+            self.application = (
+                ApplicationBuilder()
+                .token(self.token)
+                .concurrent_updates(True)  # Enable concurrent handling of updates
+                .build()
+            )
+            self.bot = self.application.bot
+            print(f"Telegram bot initialized with token: {self.token[:5]}...")
         except Exception as e:
-            print(f"Error initializing Telegram bot: {str(e)}")
+            print(f"Error initializing Telegram bot: {e}")
             self.bot = None
-    
+            self.application = None
+
     def is_enabled(self):
-        """Check if Telegram notifications are enabled"""
-        return (self.config["telegram"]["enabled"] and 
-                self.bot is not None and 
-                self.config["telegram"]["chat_id"])
-    
+        """Check if Telegram notifications are enabled."""
+        return (
+            self.config["telegram"]["enabled"]
+            and self.bot is not None
+            and self.chat_id is not None
+        )
+
     def can_send_notification(self, notification_type):
         """
-        Check if a notification can be sent for this type, using the shared cooldown value
-        but tracking last sent time per type.
+        Check if a notification can be sent based on a cooldown period.
         """
         if not self.is_enabled():
-            print(f"Telegram notifications not enabled")
+            print("Telegram notifications not enabled")
             return False
 
         current_time = time.time()
-        cooldown = self.config["telegram"]["cooldown"]
-
-        # Only check per-type cooldown, not global
-        last_time = self.last_notification_time.get(notification_type, 0)
-        if current_time - last_time >= cooldown:
+        if (notification_type not in self.last_notification_time or 
+                (current_time - self.last_notification_time[notification_type]) >= self.cooldown):
             return True
 
-        print(f"Telegram notification on cooldown for type: {notification_type}. " +
-              f"Next notification in {cooldown - (current_time - last_time):.1f} seconds")
+        remaining = self.cooldown - (current_time - self.last_notification_time[notification_type])
+        print(f"Telegram notification on cooldown for type: {notification_type}. Next notification in {remaining:.1f} seconds")
         return False
-    
+
     async def send_notification_async(self, message, image_path=None, notification_type="general"):
         """
-        Send a notification message and optionally an image to Telegram using asyncio
+        Asynchronously send a notification message (and optionally an image) to Telegram.
         """
-        if not self.is_enabled() or not self.can_send_notification(notification_type):
+        if not self.is_enabled():
+            print("Telegram notifications not enabled")
             return False
-            
-        # Update last notification times
-        current_time = time.time()
-        self.last_notification_time[notification_type] = current_time
-        self.last_global_notification_time = current_time
-        
+
+        if not self.can_send_notification(notification_type):
+            return False
+
+        # Update last notification time for this type
+        self.last_notification_time[notification_type] = time.time()
+
         try:
-            chat_id = self.config["telegram"]["chat_id"]
-            
-            # First send the message with image if provided
             if image_path and os.path.exists(image_path):
-                with open(image_path, 'rb') as image_file:
+                with open(image_path, "rb") as image_file:
                     await self.bot.send_photo(
-                        chat_id=chat_id, 
-                        photo=image_file, 
+                        chat_id=self.chat_id,
+                        photo=InputFile(image_file),
                         caption=message,
                     )
                 print(f"Telegram image sent: {image_path}")
             else:
                 await self.bot.send_message(
-                    chat_id=chat_id, 
+                    chat_id=self.chat_id,
                     text=message,
                 )
-                print(f"Telegram message sent without image")
-                    
+                print("Telegram message sent without image")
+
             print(f"Telegram notification sent: {notification_type}")
             return True
         except Exception as e:
-            print(f"Error sending Telegram notification: {str(e)}")
-            # Force re-initialization of the bot on error
-            self.setup_bot()
+            print(f"Error sending Telegram notification: {e}")
             return False
-    
+
     def send_notification(self, message, image_path=None, notification_type="general"):
         """
-        Non-async wrapper for send_notification_async that doesn't block
+        Synchronous wrapper for send_notification_async. Ensures that the event loop is active.
         """
-        print(f"Queuing {notification_type} notification via Telegram")
-        
-        # Make sure we have the latest config, but only if needed
-        if not self.is_enabled():
-            # First quick check without reloading
-            self.reload_config()  # Only reload if current config shows disabled
-            if not self.is_enabled():
-                print(f"Telegram is not properly configured or enabled")
-                return False
-        
-        # Create and start a thread for sending the notification
-        telegram_thread = threading.Thread(
-            target=self._send_notification_thread,
-            args=(message, image_path, notification_type),
-            daemon=True
-        )
-        telegram_thread.start()
-        return True  # Return immediately, notification sent asynchronously
-    
-    def _send_notification_thread(self, message, image_path, notification_type):
-        """Thread function to handle the async notification without blocking"""
-        # Create a new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+        if self.loop.is_closed():
+            print("Event loop is closed. Creating a new event loop.")
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         try:
-            # Run the async function in the new loop
-            loop.run_until_complete(
+            result = self.loop.run_until_complete(
                 self.send_notification_async(message, image_path, notification_type)
             )
+            return result
         except Exception as e:
-            print(f"Exception in Telegram notification thread: {str(e)}")
-        finally:
-            # Close the loop
-            loop.close()
-    
+            print(f"Exception in send_notification: {e}")
+            return False
+
     def send_fire_alert(self, image_path=None):
-        """Send fire detection alert"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"🚨 FIRE DETECTED! 🔥\nTimestamp: {timestamp}\nImmediate action is required!"
-        print(f"Sending fire alert with image: {image_path}")
+        """Send a fire detection alert."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"🔥 FIRE DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
         return self.send_notification(message, image_path, "fire")
-    
+
     def send_smoke_alert(self, image_path=None):
-        """Send smoke detection alert"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"⚠️ SMOKE DETECTED! 💨\nTimestamp: {timestamp}\nCheck for fire!"
-        print(f"Sending smoke alert with image: {image_path}")
+        """Send a smoke detection alert."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"💨 SMOKE DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
         return self.send_notification(message, image_path, "smoke")
-    
-    def send_face_alert(self, image_path=None):
-        """Send face detection alert"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"👁️ FACE DETECTED! 👁️\nTimestamp: {timestamp}"
-        return self.send_notification(message, image_path, "face")
-    
+
     def send_motion_alert(self, image_path=None):
-        """Send motion detection alert"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"🔄 MOTION DETECTED! \nTimestamp: {timestamp}"
-        return self.send_notification(message, image_path, "motion")
-    
+        """Send a person detection alert."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"👤 MOTION DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
+        return self.send_notification(message, image_path, "Motion")
+
+    def send_face_alert(self, image_path=None):
+        """Send a face detection alert."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"👁️ FACE DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
+        return self.send_notification(message, image_path, "face")
+
     def send_test_message(self):
-        """Send a test message to verify Telegram configuration"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"✅ TEST MESSAGE ✅\nYour Telegram integration is working correctly!\nTimestamp: {timestamp}"
+        """Send a test message to verify Telegram configuration."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"✅ TEST: Telegram integration working at {timestamp} - Livestream: http://127.0.0.1:8080/video_feed"
+        return self.send_notification(message, None, "test")
+
+    def send_welcome_message(self):
+        """Send a welcome message when the system starts."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"🔧 SYSTEM ONLINE at {timestamp} - Livestream available: http://127.0.0.1:8080/video_feed"
         return self.send_notification(message, None, "test")
 
 # Camera handling
@@ -882,44 +864,59 @@ class DetectionSystem:
                 except Exception as e:
                     print(f"{Colors.RED}Error removing old face image: {str(e)}{Colors.RESET}")
     
-    def update_alarm_state(self, fire, smoke, image_path=None):
+    def update_alarm_state(self, fire, smoke, image_path=None, confirmed_by_mq2=False):
         """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
         if fire and self.config["detection"]["fire"]:
             self.fire_persistence_count += 1
-            self.last_fire_smoke_time = time.time()
-            if self.fire_persistence_count == self.ALARM_THRESHOLD - 1 and not self.pre_alarm_logged:
-                self.system_status = "FIRE PRE-ALERT"
-                print(f"{Colors.YELLOW}Fire pre-alert triggered!{Colors.RESET}")
-                self.pre_alarm_logged = True
-            elif self.fire_persistence_count >= self.ALARM_THRESHOLD:
-                self.system_status = "FIRE DETECTED!"
-                self.last_detections["fire"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.telegram_service.send_fire_alert(image_path)
-                self.play_alarm_sound()
         else:
-            self.fire_persistence_count = max(0, self.fire_persistence_count - 1)
+            self.fire_persistence_count = max(0, self.fire_persistence_count - 1)  # Gradually decrease
 
         if smoke and self.config["detection"]["smoke"]:
             self.smoke_persistence_count += 1
-            self.last_fire_smoke_time = time.time()
-            if self.smoke_persistence_count == self.ALARM_THRESHOLD - 1 and not self.pre_alarm_logged:
-                self.system_status = "SMOKE PRE-ALERT"
-                print(f"{Colors.YELLOW}Smoke pre-alert triggered!{Colors.RESET}")
-                self.pre_alarm_logged = True
-            elif self.smoke_persistence_count >= self.ALARM_THRESHOLD:
-                self.system_status = "SMOKE DETECTED!"
-                self.last_detections["smoke"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.telegram_service.send_smoke_alert(image_path)
-                self.play_alarm_sound()
         else:
-            self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)
+            self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)  # Gradually decrease
 
-        # Stop alarm if no fire or smoke has been detected for 3 seconds
-        current_time = time.time()
-        if (self.alarm_playing and not (fire or smoke) and
-                current_time - self.last_fire_smoke_time >= 3.0):
-            print(f"{Colors.GREEN}No fire/smoke detected for 3 seconds, stopping alarm{Colors.RESET}")
-            self.stop_alarm()
+        fire_persist = self.fire_persistence_count >= self.ALARM_THRESHOLD
+        smoke_persist = self.smoke_persistence_count >= self.ALARM_THRESHOLD
+
+        # Improved alarm state management
+        if (fire_persist or smoke_persist) and not self.alarm_triggered:
+            alarm_type = ""
+            if fire_persist and smoke_persist:
+                alarm_type = "FIRE & SMOKE"
+                self.system_status = "Fire & Smoke Detected"
+            elif fire_persist:
+                alarm_type = "FIRE"
+                self.system_status = "Fire Detected"
+            else:
+                alarm_type = "SMOKE"
+                self.system_status = "Smoke Detected"
+
+            mq2_status = "Yes" if confirmed_by_mq2 else "No"
+            print(f"{Colors.BOLD}{Colors.RED}🔥🔥 ALARM STATE: PERSISTENT {alarm_type} DETECTED! 🔥🔥{Colors.RESET}")
+            print(f"{Colors.YELLOW}Confirmed by MQ2: {mq2_status}{Colors.RESET}")
+            self.alarm_triggered = True
+            self.play_alarm_sound()  # Start alarm
+
+            # Update detection timestamps
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if fire_persist:
+                self.last_detections["fire"] = timestamp
+            if smoke_persist:
+                self.last_detections["smoke"] = timestamp
+
+            # Send Telegram notification with the image
+            if fire_persist:
+                print(f"Sending fire alert with image: {image_path}")
+                self.telegram_service.send_fire_alert(image_path)
+            elif smoke_persist:
+                print(f"Sending smoke alert with image: {image_path}")
+
+        elif not fire_persist and not smoke_persist and self.alarm_triggered:
+            print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire or Smoke detected. Resetting alarm...{Colors.RESET}")
+            self.stop_alarm()  # Stop the alarm immediately
+            self.alarm_triggered = False
+            self.system_status = "Normal"
 
     def play_alarm_sound(self):
         """Play alarm sound in a thread-safe manner with short beep cycles"""

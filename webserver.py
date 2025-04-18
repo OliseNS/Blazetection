@@ -207,8 +207,11 @@ def start_web_server(host='0.0.0.0', port=8080):
 
     if detection_thread is None or not detection_thread.is_alive():
         detection_thread = start_detection_system()
-        time.sleep(1)
+        time.sleep(2)
         tts_queue.put("System started successfully.")
+        
+        # Send Telegram welcome message after system is ready
+        detection_system.telegram_service.send_welcome_message()
 
     # Start the frame streaming thread
     socketio.start_background_task(stream_frames)
