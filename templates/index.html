@@ -814,10 +814,7 @@
                     </div>
                     <div class="card-body" style="padding: 0;">
                         <div class="video-container">
-                            <img id="live-feed" class="live-camera-feed" src="{{ url_for('video_feed') }}" alt="Live camera feed">
-                            <button id="fullscreen-btn" class="fullscreen-button" title="Enter fullscreen mode">
-                                <i class="fas fa-expand"></i>
-                            </button>
+                            <canvas id="live-feed-canvas" class="live-camera-feed"></canvas>
                         </div>
                     </div>
                 </div>
@@ -981,6 +978,34 @@
 
 <script async defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js"></script>
 <script src="/static/main.js"></script>
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+    const canvas = document.getElementById('live-feed-canvas');
+    const context = canvas.getContext('2d');
+    const socket = io();
+
+    // Set canvas dimensions
+    canvas.width = 640; // Adjust as needed
+    canvas.height = 480; // Adjust as needed
+
+    // Listen for video frames from the server
+    socket.on('video_frame', (data) => {
+        const image = new Image();
+        image.src = 'data:image/jpeg;base64,' + data.frame;
+        image.onload = () => {
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        };
+    });
+
+    socket.on('connect', () => {
+        console.log('Connected to WebSocket server');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Disconnected from WebSocket server');
+    });
+</script>
 
 </body>
 </html>
+``` 

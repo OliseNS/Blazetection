@@ -6,6 +6,8 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 import pyttsx3
 import cv2
 import asyncio
+from flask_socketio import SocketIO
+import base64
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -14,6 +16,9 @@ from detection_system import init_detection_system, start_detection_system
 app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
+
+# Initialize Flask-SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize detection system
 detection_system = init_detection_system()
@@ -46,6 +51,8 @@ tts_thread.start()
 
 # Start detection system in a separate thread
 detection_thread = None
+
+connected_clients = 0
 
 @app.route('/')
 def index():
@@ -158,20 +165,41 @@ def serve_face(filename):
     """Serve face images"""
     return send_from_directory('faces', filename)
 
-@app.route('/video_feed')
-def video_feed():
-    """Video streaming route. Put this in the src attribute of an img tag."""
-    return Response(generate_frames(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
-def generate_frames():
-    """Generate frames for the video stream."""
+def stream_frames():
+    """Continuously stream frames to WebSocket clients."""
     while True:
-        frame = detection_system.get_latest_frame()
-        ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        if connected_clients > 0:
+            frame = detection_system.get_latest_frame()
+            if frame is not None:
+                # Resize the frame to a higher resolution for better quality
+                frame_resized = cv2.resize(frame, (640, 480))  # Adjust resolution as needed
+                
+                # Encode the frame as JPEG with higher quality
+                _, buffer = cv2.imencode('.jpg', frame_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+                
+                # Convert to base64 for WebSocket transmission
+                frame_data = base64.b64encode(buffer).decode('utf-8')
+                
+                # Emit the frame to all connected clients
+                socketio.emit('video_frame', {'frame': frame_data})
+        
+        # Adjust frame rate (e.g., ~60 FPS)
+        socketio.sleep(1/60)
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle new WebSocket client connections."""
+    global connected_clients
+    connected_clients += 1
+    print("Client connected")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle WebSocket client disconnections."""
+    global connected_clients
+    connected_clients -= 1
+    print("Client disconnected")
 
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""
@@ -182,7 +210,11 @@ def start_web_server(host='0.0.0.0', port=8080):
         time.sleep(1)
         tts_queue.put("System started successfully.")
 
-    app.run(host=host, port=port, threaded=True)
+    # Start the frame streaming thread
+    socketio.start_background_task(stream_frames)
+
+    # Start the Flask-SocketIO server
+    socketio.run(app, host=host, port=port)
 
 if __name__ == '__main__':
     os.makedirs('faces', exist_ok=True)
