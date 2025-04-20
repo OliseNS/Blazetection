@@ -299,21 +299,11 @@ class Camera:
         if not self.cap.isOpened():
             raise IOError(f"Error accessing webcam at index {camera_index}")
 
-        # Query and set the maximum resolution
-        self.set_max_resolution()
-
-    def set_max_resolution(self):
-        """Set the camera to its maximum resolution"""
-        # Query the maximum resolution supported by the camera
-        max_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        max_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        # Set the resolution
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, max_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, max_height)
-
-        print(f"Camera resolution set to {max_width}x{max_height}")
-
+        # Set desired resolution to 320x240
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+        print("Camera resolution set to 320x240")
+    
     def read_frame(self):
         """Read a frame from the camera"""
         return self.cap.read()
@@ -635,17 +625,6 @@ class DetectionSystem:
                     else:
                         self.no_detection_count = 0
                 
-                # Adaptive sleep based on processing time
-                processing_time = time.time() - start_time
-                processing_times.append(processing_time)
-                if len(processing_times) > max_processing_times:
-                    processing_times.pop(0)
-                
-                avg_processing_time = sum(processing_times) / len(processing_times)
-                sleep_time = max(0.01, self.DETECTION_INTERVAL/2 - avg_processing_time)
-                
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
         except KeyboardInterrupt:
             print(f"\n{Colors.YELLOW}Exiting program...{Colors.RESET}")
         finally:

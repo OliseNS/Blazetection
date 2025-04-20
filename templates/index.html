@@ -407,6 +407,7 @@
         .detection-info {
             flex: 1;
         }
+        
 
         .detection-type {
             font-weight: 600;
@@ -772,6 +773,9 @@
             }
         }
 
+        
+
+
     </style>
 </head>
 <body>
@@ -790,11 +794,11 @@
                 <div class="system-stats">
                     <div class="stat-item">
                         <i class="fas fa-clock"></i>
-                        <span id="uptime">Uptime: 0h 0m</span>
+                        <span id="uptime">&nbsp;Uptime: 0h 0m</span>
                     </div>
                     <div class="stat-item">
                         <i class="fas fa-film"></i>
-                        <span id="frames-processed">Frames: 0</span>
+                        <span id="frames-processed">&nbsp;Frames: 0</span>
                     </div>
                 </div>
             </div>
@@ -809,7 +813,7 @@
                     <div class="card-header">
                         <div class="card-header-left">
                             <i class="fas fa-video"></i>
-                            <h2>Live Camera Feed</h2>
+                            <h2>&nbsp;Live Camera Feed</h2>
                         </div>
                     </div>
                     <div class="card-body" style="padding: 0;">
@@ -824,7 +828,7 @@
                     <div class="card-header">
                         <div class="card-header-left">
                             <i class="fas fa-volume-up"></i>
-                            <h2>Text-to-Speech</h2>
+                            <h2>&nbsp;Text-to-Speech</h2>
                         </div>
                     </div>
                     <div class="card-body">
@@ -851,7 +855,7 @@
                     <div class="card-header">
                         <div class="card-header-left">
                             <i class="fas fa-user"></i>
-                            <h2>Recent Faces</h2>
+                            <h2>&nbsp;Recent Faces</h2>
                         </div>
                     </div>
                     <div class="card-body">
@@ -867,7 +871,7 @@
                     <div class="card-header">
                         <div class="card-header-left">
                             <i class="fas fa-bell"></i>
-                            <h2>Recent Detections</h2>
+                            <h2>&nbsp;Recent Detections</h2>
                         </div>
                     </div>
                     <div class="card-body">
@@ -883,41 +887,41 @@
                     <div class="card-header">
                         <div class="card-header-left">
                             <i class="fas fa-cog"></i>
-                            <h2>Detection Control</h2>
+                            <h2>&nbsp;Detection Control</h2>
                         </div>
                     </div>
                     <div class="card-body">
                         <div class="toggle-container">
                             <label class="toggle">
-                                <span class="toggle-label"><i class="fas fa-fire"></i> Fire Detection</span>
+                                <span class="toggle-label"><i class="fas fa-fire"></i>&nbsp;Fire Detection</span>
                                 <input type="checkbox" id="fire-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="toggle-container">
                             <label class="toggle">
-                                <span class="toggle-label"><i class="fas fa-smog"></i> Smoke Detection</span>
+                                <span class="toggle-label"><i class="fas fa-smog"></i>&nbsp;Smoke Detection</span>
                                 <input type="checkbox" id="smoke-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="toggle-container">
                             <label class="toggle">
-                                <span class="toggle-label"><i class="fas fa-walking"></i> Motion Detection</span>
+                                <span class="toggle-label"><i class="fas fa-walking"></i>&nbsp;Motion Detection</span>
                                 <input type="checkbox" id="motion-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="toggle-container">
                             <label class="toggle">
-                                <span class="toggle-label"><i class="fas fa-user"></i> Face Detection</span>
+                                <span class="toggle-label"><i class="fas fa-user"></i>&nbsp;Face Detection</span>
                                 <input type="checkbox" id="face-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="alarm-control">
                             <button id="stop-alarm-btn" class="btn btn-danger">
-                                <i class="fas fa-volume-mute"></i> Stop Alarm
+                                <i class="fas fa-volume-mute"></i>&nbsp;Stop Alarm
                             </button>
                         </div>
                     </div>
@@ -931,13 +935,13 @@
                     <div class="card-header">
                         <div class="card-header-left">
                             <i class="fab fa-telegram"></i>
-                            <h2>Telegram Control</h2>
+                            <h2>&nbsp;Telegram Control</h2>
                         </div>
                     </div>
                     <div class="card-body">
                         <div class="toggle-container">
                             <label class="toggle">
-                                <span class="toggle-label"><i class="fas fa-bell"></i> Telegram Notifications</span>
+                                <span class="toggle-label"><i class="fas fa-bell"></i>&nbsp; Telegram Notifications</span>
                                 <input type="checkbox" id="telegram-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
@@ -985,8 +989,8 @@
     const socket = io();
 
     // Set canvas dimensions
-    canvas.width = 640; // Adjust as needed
-    canvas.height = 480; // Adjust as needed
+    canvas.width = 320; // Adjust as needed
+    canvas.height = 240; // Adjust as needed
 
     // Listen for video frames from the server
     socket.on('video_frame', (data) => {
@@ -1008,4 +1012,3 @@
 
 </body>
 </html>
-``` 

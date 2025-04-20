@@ -137,7 +137,6 @@ def get_statistics():
 
 @app.route('/api/detections', methods=['GET'])
 def get_detections():
-    """Get a list of detection images"""
     try:
         detection_folder = os.path.join(os.getcwd(), 'detections')
         if not os.path.exists(detection_folder):
@@ -172,20 +171,11 @@ def stream_frames():
         if connected_clients > 0:
             frame = detection_system.get_latest_frame()
             if frame is not None:
-                # Resize the frame to a higher resolution for better quality
-                frame_resized = cv2.resize(frame, (640, 480))  # Adjust resolution as needed
-                
-                # Encode the frame as JPEG with higher quality
-                _, buffer = cv2.imencode('.jpg', frame_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-                
-                # Convert to base64 for WebSocket transmission
-                frame_data = base64.b64encode(buffer).decode('utf-8')
-                
-                # Emit the frame to all connected clients
-                socketio.emit('video_frame', {'frame': frame_data})
-        
-        # Adjust frame rate (e.g., ~60 FPS)
-        socketio.sleep(1/60)
+                ret, buffer = cv2.imencode('.bmp', frame)  # Using BMP for no compression
+                if ret:
+                    frame_data = base64.b64encode(buffer).decode('utf-8')
+                    socketio.emit('video_frame', {'frame': frame_data})
+        socketio.sleep(1/20)
 
 @socketio.on('connect')
 def handle_connect():
@@ -229,3 +219,4 @@ if __name__ == '__main__':
     print(f"Press Ctrl+C to exit")
 
     start_web_server()
+    app.run(host='0.0.0.0', port=8080)

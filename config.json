@@ -2,11 +2,11 @@
   "detection": {
     "fire": true,
     "smoke": true,
-    "motion": false,
+    "motion": true,
     "face": true
   },
   "telegram": {
-    "enabled": true,
+    "enabled": false,
     "token": "",
     "chat_id": "",
     "cooldown": 30
