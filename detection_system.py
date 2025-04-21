@@ -293,16 +293,21 @@ class TelegramService:
 
 # Camera handling
 class Camera:
-    def __init__(self, camera_index=0):
-        """Initialize camera capture"""
-        self.cap = cv2.VideoCapture(camera_index)
+    def __init__(self, source=None):
+        """
+        Initialize camera capture.
+        If a source is provided, it can be a streaming URL or a numeric camera index.
+        """
+        if source is None:
+            source = 0
+        self.cap = cv2.VideoCapture(source)
         if not self.cap.isOpened():
-            raise IOError(f"Error accessing webcam at index {camera_index}")
+            raise IOError(f"Error accessing camera source: {source}")
 
-        # Set desired resolution to 320x240
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-        print("Camera resolution set to 320x240")
+        # Set desired resolution to 224x224
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 224)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 224)
+        print(f"Camera initialized with source: {source}")
     
     def read_frame(self):
         """Read a frame from the camera"""
@@ -459,9 +464,18 @@ class DetectionSystem:
         os.makedirs("faces", exist_ok=True)
         os.makedirs("detections", exist_ok=True)
         
-        # Initialize configuration
+        # Initialize configuration and load the system config
         self.config_manager = ConfigManager(config_path)
         self.config = self.config_manager.get_config()
+        
+        # Use streaming URL if provided, otherwise fall back to the local camera index.
+        camera_source = self.config["system"].get("camera_url")
+        if camera_source:
+            print(f"Using streaming URL as camera source: {camera_source}")
+            self.camera = Camera(camera_source)
+        else:
+            camera_index = self.config["system"]["camera_index"]
+            self.camera = Camera(camera_index)
         
         # Register config update callback
         self.config_manager.register_callback(self.on_config_update)
@@ -469,10 +483,6 @@ class DetectionSystem:
         # Initialization flags
         self.running = False
         self.face_count = 0
-        
-        # Initialize camera
-        camera_index = self.config["system"]["camera_index"]
-        self.camera = Camera(camera_index)
         
         # Initialize detectors
         self.object_detector = YOLODetector("model_ncnn_model")
@@ -528,6 +538,11 @@ class DetectionSystem:
         # Add statistics tracking
         self.start_time = time.time()
         self.frames_processed = 0
+
+    def init_telegram_service(self):
+        """Reinitialize the Telegram service using the current configuration."""
+        self.telegram_service = TelegramService(self.config_manager)
+        return self.telegram_service
         
     def cleanup_old_images(self):
         try:
@@ -554,81 +569,6 @@ class DetectionSystem:
         self.telegram_service.reload_config()
         
         print(f"{Colors.CYAN}Configuration updated. Telegram status: {self.telegram_service.is_enabled()}{Colors.RESET}")
-    
-    def run(self):
-        self.running = True
-        print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
-        
-        # Lower resolution for processing to improve performance
-        process_width = 224  # Match the YOLO model's input size for optimal performance
-        process_height = 224
-        
-        # Adaptive timing variables
-        processing_times = []
-        max_processing_times = 10  # Number of times to average
-        
-        try:
-            while self.running:
-                start_time = time.time()
-                success, frame = self.camera.read_frame()
-                if not success:
-                    print(f"{Colors.RED}Error reading frame from camera{Colors.RESET}")
-                    time.sleep(0.5)  # Reduced wait time
-                    continue
-                
-                # Increment frames processed
-                self.frames_processed += 1
-
-                # Store the latest frame for sharing
-                with self.frame_lock:
-                    self.latest_frame = frame.copy()
-
-                current_time = time.time()
-                
-                # Process every frame but use a simplified processing pipeline when under high load
-                process_full = current_time - self.last_detection_time >= self.DETECTION_INTERVAL
-                
-                if process_full:
-                    self.last_detection_time = current_time
-                    # Full processing pipeline
-                    
-                    # Convert to RGB for MediaPipe (face detection)
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    
-                    # Process with motion detection
-                    motion_detected = False
-                    if self.config_manager.is_detection_enabled("motion"):
-                        motion_detected = self.process_motion_detection(frame)
-                    
-                    # Process with face detection
-                    face_detected = False
-                    if self.config_manager.is_detection_enabled("face"):
-                        face_detected = self.process_face_detection(frame, frame_rgb)
-                    
-                    # Process with object detection (fire/smoke)
-                    fire_detected = False
-                    smoke_detected = False
-                    if (self.config_manager.is_detection_enabled("fire") or 
-                        self.config_manager.is_detection_enabled("smoke")):
-                        # Resize for better performance with YOLO
-                        frame_resized = cv2.resize(frame, (640, 480))  # Adjust resolution as needed
-                        fire_detected, smoke_detected = self.process_object_detection(frame_resized, frame)
-                    
-                    # Reset to normal if no detections
-                    if not (fire_detected or smoke_detected or motion_detected or face_detected):
-                        self.no_detection_count += 1
-                        if (self.no_detection_count > self.NO_DETECTION_THRESHOLD and 
-                            self.system_status != "Normal" and 
-                            not self.alarm_playing):
-                            self.system_status = "Normal"
-                            print(f"{Colors.GREEN}No detections, status reset to Normal{Colors.RESET}")
-                    else:
-                        self.no_detection_count = 0
-                
-        except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}Exiting program...{Colors.RESET}")
-        finally:
-            self.shutdown()
     
     def process_object_detection(self, frame_resized, frame_original):
         detected_objects = self.object_detector.detect(frame_resized)
@@ -702,6 +642,77 @@ class DetectionSystem:
         else:
             self.update_alarm_state(False, False)
         return fire_detected, smoke_detected
+
+    def run(self):
+        self.running = True
+        print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
+        
+        # Use processing resolution matching YOLO input (224x224)
+        process_width = 224
+        process_height = 224
+        
+        try:
+            while self.running:
+                start_time = time.time()
+                success, frame = self.camera.read_frame()
+                if not success:
+                    print(f"{Colors.RED}Error reading frame from camera{Colors.RESET}")
+                    time.sleep(0.5)
+                    continue
+                
+                # Increment frames processed
+                self.frames_processed += 1
+
+                # Store the latest frame for sharing
+                with self.frame_lock:
+                    self.latest_frame = frame.copy()
+
+                current_time = time.time()
+                
+                # Process every frame but use a simplified processing pipeline when under high load
+                process_full = time.time() - self.last_detection_time >= self.DETECTION_INTERVAL
+                
+                if process_full:
+                    self.last_detection_time = time.time()
+                    # Full processing pipeline
+                    
+                    # Convert to RGB for MediaPipe (face detection)
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    
+                    # Process with motion detection
+                    motion_detected = False
+                    if self.config_manager.is_detection_enabled("motion"):
+                        motion_detected = self.process_motion_detection(frame)
+                    
+                    # Process with face detection
+                    face_detected = False
+                    if self.config_manager.is_detection_enabled("face"):
+                        face_detected = self.process_face_detection(frame, frame_rgb)
+                    
+                    # Process with object detection (fire/smoke)
+                    fire_detected = False
+                    smoke_detected = False
+                    if (self.config_manager.is_detection_enabled("fire") or 
+                        self.config_manager.is_detection_enabled("smoke")):
+                        # Resize for better performance with YOLO (224x224)
+                        frame_resized = cv2.resize(frame, (224, 224))
+                        fire_detected, smoke_detected = self.process_object_detection(frame_resized, frame)
+                    
+                    # Reset to normal if no detections
+                    if not (fire_detected or smoke_detected or motion_detected or face_detected):
+                        self.no_detection_count += 1
+                        if (self.no_detection_count > self.NO_DETECTION_THRESHOLD and 
+                            self.system_status != "Normal" and 
+                            not self.alarm_playing):
+                            self.system_status = "Normal"
+                            print(f"{Colors.GREEN}No detections, status reset to Normal{Colors.RESET}")
+                    else:
+                        self.no_detection_count = 0
+                
+        except KeyboardInterrupt:
+            print(f"\n{Colors.YELLOW}Exiting program...{Colors.RESET}")
+        finally:
+            self.shutdown()
     
     def process_motion_detection(self, frame):
         """Process frame with motion detector"""

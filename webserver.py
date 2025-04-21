@@ -17,8 +17,6 @@ app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 
-# Initialize Flask-SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize detection system
 detection_system = init_detection_system()
@@ -110,6 +108,20 @@ def test_telegram():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@app.route('/api/telegram/reload', methods=['POST'])
+def reload_telegram():
+    """Reload Telegram configuration without restarting the system."""
+    try:
+        # Update the telegram configuration
+        detection_system.telegram_service.reload_config()
+        # Reinitialize the telegram service with the new configuration
+        detection_system.telegram_service = detection_system.init_telegram_service()
+        # Optionally, send a welcome message to verify the connection
+        detection_system.telegram_service.send_welcome_message()
+        return jsonify({"success": True, "message": "Telegram configuration reloaded and service reinitialized."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/tts', methods=['POST'])
 def text_to_speech():
     """Convert text to speech using pyttsx3"""
@@ -165,31 +177,7 @@ def serve_face(filename):
     return send_from_directory('faces', filename)
 
 
-def stream_frames():
-    """Continuously stream frames to WebSocket clients."""
-    while True:
-        if connected_clients > 0:
-            frame = detection_system.get_latest_frame()
-            if frame is not None:
-                ret, buffer = cv2.imencode('.bmp', frame)  # Using BMP for no compression
-                if ret:
-                    frame_data = base64.b64encode(buffer).decode('utf-8')
-                    socketio.emit('video_frame', {'frame': frame_data})
-        socketio.sleep(1/20)
 
-@socketio.on('connect')
-def handle_connect():
-    """Handle new WebSocket client connections."""
-    global connected_clients
-    connected_clients += 1
-    print("Client connected")
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle WebSocket client disconnections."""
-    global connected_clients
-    connected_clients -= 1
-    print("Client disconnected")
 
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""
@@ -203,17 +191,9 @@ def start_web_server(host='0.0.0.0', port=8080):
         # Send Telegram welcome message after system is ready
         detection_system.telegram_service.send_welcome_message()
 
-    # Start the frame streaming thread
-    socketio.start_background_task(stream_frames)
-
-    # Start the Flask-SocketIO server
-    socketio.run(app, host=host, port=port)
-
 if __name__ == '__main__':
     os.makedirs('faces', exist_ok=True)
     os.makedirs('detections', exist_ok=True)
-
-    tts_queue.put("Starting the web server and detection system. Please wait.")  # TTS announcement
     print(f"Starting web server on http://0.0.0.0:8080")
     print(f"Detection system will run in the background")
     print(f"Press Ctrl+C to exit")

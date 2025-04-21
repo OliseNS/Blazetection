@@ -597,8 +597,41 @@ function refreshHeaderStats() {
     }, 500); // Refresh every 0.5 seconds
 }
 
+// Reload Telegram configuration
+function reloadTelegramConfig() {
+    fetch('/api/telegram/reload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Telegram configuration reloaded!', 'success');
+        } else {
+            showNotification('Failed to reload Telegram configuration.', 'error');
+        }
+    })
+    .catch(() => showNotification('Error reloading Telegram configuration.', 'error'));
+}
+
+// Add event listener for reload button
+document.addEventListener('DOMContentLoaded', () => {
+    const reloadTelegramBtn = document.getElementById('reload-telegram-btn');
+    if (reloadTelegramBtn) {
+        reloadTelegramBtn.addEventListener('click', reloadTelegramConfig);
+    }
+});
+
 // Initialize the dashboard when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
     refreshHeaderStats();
 });
+window.onload = function() {
+    var username = prompt("Enter username:");
+    var password = prompt("Enter password:");
+    if (username !== "admin" || password !== "password") {
+        alert("Incorrect credentials. Please refresh the page to try again.");
+        document.body.innerHTML = "<h2>Access Denied</h2>";
+    }
+};
