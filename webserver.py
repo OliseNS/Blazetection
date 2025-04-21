@@ -54,8 +54,9 @@ connected_clients = 0
 
 @app.route('/')
 def index():
-    """Render the main dashboard page"""
-    return render_template('index.html')
+    """Render the main dashboard page with camera URL from config"""
+    camera_url = detection_system.config_manager.get_config()["system"].get("camera_url", "http://192.168.1.225:5000")
+    return render_template('index.html', camera_url=camera_url)
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
