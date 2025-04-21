@@ -19,6 +19,13 @@ import numpy as np
 import struct
 import subprocess
 
+try:
+    from gpiozero import DigitalInputDevice  # Import gpiozero for MQ2 sensor
+    GPIO_AVAILABLE = True
+except ImportError:
+    print("GPIO library not available. MQ2 sensor functionality will be disabled.")
+    GPIO_AVAILABLE = False
+
 # ANSI color codes for terminal output
 class Colors:
     RESET = '\033[0m'
@@ -291,6 +298,12 @@ class TelegramService:
         message = f"🔧 SYSTEM ONLINE at {timestamp} - Livestream available: http://127.0.0.1:8080/video_feed"
         return self.send_notification(message, None, "test")
 
+    def send_gas_alert(self):
+        """Send a gas detection alert."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        message = f"⚠️ GAS DETECTED at {timestamp} - Check your environment immediately!"
+        return self.send_notification(message, None, "gas")
+
 # Camera handling
 class Camera:
     def __init__(self, source=None):
@@ -454,6 +467,37 @@ class SineWaveAlarm:
         except Exception as e:
             print(f"Error during audio cleanup: {str(e)}")
 
+# MQ2 Gas Sensor Handler
+class MQ2Sensor:
+    def __init__(self, pin=17):
+        """
+        Initialize MQ2 sensor on the specified GPIO pin.
+        If GPIO is not available or running on a non-Raspberry Pi system, simulate the sensor.
+        """
+        if GPIO_AVAILABLE:
+            try:
+                self.sensor = DigitalInputDevice(pin)
+            except Exception as e:
+                print(f"GPIO initialization failed: {e}. Simulating sensor.")
+                self.sensor = None
+        else:
+            self.sensor = None  # Simulate sensor
+        self.gas_detected = False
+
+    def read_sensor(self):
+        """
+        Read the MQ2 sensor value.
+        Returns True if gas is detected, False otherwise.
+        If GPIO is not available, always return False.
+        """
+        if self.sensor:
+            # LOW signal indicates gas presence
+            self.gas_detected = self.sensor.value == 0
+        else:
+            # Simulate no gas detected
+            self.gas_detected = False
+        return self.gas_detected
+
 # Main detection system
 class DetectionSystem:
     def __init__(self, config_path="config.json"):
@@ -538,6 +582,12 @@ class DetectionSystem:
         # Add statistics tracking
         self.start_time = time.time()
         self.frames_processed = 0
+
+        # Initialize MQ2 sensor
+        self.mq2_sensor = MQ2Sensor(pin=17)
+        
+        # Add MQ2 detection tracking
+        self.mq2_gas_detected = False
 
     def init_telegram_service(self):
         """Reinitialize the Telegram service using the current configuration."""
@@ -698,8 +748,17 @@ class DetectionSystem:
                         frame_resized = cv2.resize(frame, (224, 224))
                         fire_detected, smoke_detected = self.process_object_detection(frame_resized, frame)
                     
+                    # Process MQ2 gas detection
+                    self.mq2_gas_detected = self.mq2_sensor.read_sensor()
+                    if self.mq2_gas_detected:
+                        print(f"{Colors.RED}[{datetime.now().strftime('%H:%M:%S')}] Gas detected by MQ2 sensor!{Colors.RESET}")
+                        self.update_alarm_state(fire_detected, smoke_detected, confirmed_by_mq2=True)
+                        self.telegram_service.send_gas_alert()
+                    else:
+                        print(f"{Colors.GREEN}[{datetime.now().strftime('%H:%M:%S')}] No gas detected by MQ2 sensor.{Colors.RESET}")
+                    
                     # Reset to normal if no detections
-                    if not (fire_detected or smoke_detected or motion_detected or face_detected):
+                    if not (fire_detected or smoke_detected or motion_detected or face_detected or self.mq2_gas_detected):
                         self.no_detection_count += 1
                         if (self.no_detection_count > self.NO_DETECTION_THRESHOLD and 
                             self.system_status != "Normal" and 
@@ -869,6 +928,14 @@ class DetectionSystem:
         fire_persist = self.fire_persistence_count >= self.ALARM_THRESHOLD
         smoke_persist = self.smoke_persistence_count >= self.ALARM_THRESHOLD
 
+        # Handle gas detection
+        if confirmed_by_mq2 and not self.alarm_triggered:
+            print(f"{Colors.BOLD}{Colors.RED}⚠️ GAS DETECTED! Triggering alarm...{Colors.RESET}")
+            self.system_status = "Gas Detected"
+            self.alarm_triggered = True
+            self.play_alarm_sound()
+            self.telegram_service.send_gas_alert()
+
         # Improved alarm state management
         if (fire_persist or smoke_persist) and not self.alarm_triggered:
             alarm_type = ""
@@ -947,7 +1014,8 @@ class DetectionSystem:
     def shutdown(self):
         """Clean shutdown of the system"""
         self.running = False
-        self.camera.release()
+        if self.camera:
+            self.camera.release()  # Ensure the camera is released
         # Make sure to stop any playing alarm and clean up resources
         self.stop_alarm()
         self.alarm.cleanup()

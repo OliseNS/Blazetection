@@ -627,11 +627,3 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
     refreshHeaderStats();
 });
-window.onload = function() {
-    var username = prompt("Enter username:");
-    var password = prompt("Enter password:");
-    if (username !== "admin" || password !== "password") {
-        alert("Incorrect credentials. Please refresh the page to try again.");
-        document.body.innerHTML = "<h2>Access Denied</h2>";
-    }
-};

@@ -6,7 +6,6 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 import pyttsx3
 import cv2
 import asyncio
-from flask_socketio import SocketIO
 import base64
 
 # Import the detection system
@@ -177,8 +176,24 @@ def serve_face(filename):
     """Serve face images"""
     return send_from_directory('faces', filename)
 
+@app.route('/api/restart', methods=['POST'])
+def restart_detection_system():
+    """Restart the detection system."""
+    global detection_thread, detection_system
 
+    try:
+        # Stop the current detection system
+        if detection_thread and detection_thread.is_alive():
+            detection_system.running = False
+            detection_thread.join(timeout=5)  # Wait for the thread to stop
 
+        # Restart the detection system
+        detection_thread = start_detection_system()
+        time.sleep(2)  # Allow some time for the system to initialize
+        tts_queue.put("Detection system restarted successfully.")
+        return jsonify({"success": True, "message": "Detection system restarted successfully."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""
