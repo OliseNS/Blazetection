@@ -7,6 +7,8 @@ import pyttsx3
 import cv2
 import asyncio
 import base64
+import sys
+import subprocess
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -108,20 +110,6 @@ def test_telegram():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/telegram/reload', methods=['POST'])
-def reload_telegram():
-    """Reload Telegram configuration without restarting the system."""
-    try:
-        # Update the telegram configuration
-        detection_system.telegram_service.reload_config()
-        # Reinitialize the telegram service with the new configuration
-        detection_system.telegram_service = detection_system.init_telegram_service()
-        # Optionally, send a welcome message to verify the connection
-        detection_system.telegram_service.send_welcome_message()
-        return jsonify({"success": True, "message": "Telegram configuration reloaded and service reinitialized."}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
 @app.route('/api/tts', methods=['POST'])
 def text_to_speech():
     """Convert text to speech using pyttsx3"""
@@ -177,26 +165,39 @@ def serve_face(filename):
     return send_from_directory('faces', filename)
 
 @app.route('/api/restart', methods=['POST'])
-def restart_detection_system():
-    """Restart the detection system by shutting it down and reinitializing it."""
-    global detection_thread, detection_system
-
+def restart_system():
+    """Restart the entire application (web server and detection system)"""
     try:
-        # Gracefully shutdown the current detection system if running
+        # Announce restart via TTS
+        tts_queue.put("System is restarting. Please wait.")
+        
+        # Stop the detection system gracefully if it's running
+        global detection_thread
+        if detection_thread and detection_thread.is_alive():
+            detection_system.running = False
+            detection_thread.join(timeout=2)  # Wait for up to 2 seconds
+        
+        # Clean up resources
         if detection_system:
             detection_system.shutdown()
         
-        # Reinitialize detection system (which also reinitializes the camera)
-        from detection_system import init_detection_system, start_detection_system  # Ensure fresh instance
-        detection_system = init_detection_system()
-        detection_thread = start_detection_system()
+        # First send a response that the restart is in progress
+        response = jsonify({"success": True, "message": "System is restarting..."})
         
-        # Allow some time for initialization
-        time.sleep(2)
-        tts_queue.put("Detection system restarted successfully.")
-        return jsonify({"success": True, "message": "Detection system restarted successfully."}), 200
-
+        # Schedule the restart after the response is sent
+        def restart_after_response():
+            time.sleep(1)  # Give time for the response to be sent
+            # Start a new process with the same command and arguments
+            subprocess.Popen([sys.executable] + sys.argv)
+            # Exit the current process
+            os._exit(0)
+        
+        threading.Thread(target=restart_after_response, daemon=True).start()
+        
+        return response
+        
     except Exception as e:
+        print(f"Restart Error: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 def start_web_server(host='0.0.0.0', port=8080):

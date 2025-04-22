@@ -6,14 +6,14 @@
     "face": true
   },
   "telegram": {
-    "enabled": false,
-    "token": "",
-    "chat_id": "",
+    "enabled": true,
+    "token": "7617318916:AAEkSQv3jGwcKbARlDVuMby550LoepoKjto",
+    "chat_id": "1946046256",
     "cooldown": 30
   },
   "system": {
     "camera_index": 0,
-    "camera_url": "http://172.23.216.82:5000",
+    "camera_url": "http://172.18.0.216:5000",
     "detection_interval": 0.5,
     "face_save_interval": 1.0,
     "alarm_threshold": 3,

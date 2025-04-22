@@ -317,9 +317,7 @@ class Camera:
         if not self.cap.isOpened():
             raise IOError(f"Error accessing camera source: {source}")
 
-        # Set desired resolution to 224x224
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 224)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 224)
+        # Remove the resolution setting to keep original camera resolution
         print(f"Camera initialized with source: {source}")
     
     def read_frame(self):
@@ -341,7 +339,9 @@ class YOLODetector:
     
     def detect(self, frame):
         """Detect objects in frame using YOLO"""
-        results = self.model.predict(frame, imgsz=224, conf=self.CONF_THRESHOLD, iou=self.IOU_THRESHOLD)
+        # Get the frame dimensions dynamically to match the resized frame
+        height, width = frame.shape[:2]
+        results = self.model.predict(frame, imgsz=width, conf=self.CONF_THRESHOLD, iou=self.IOU_THRESHOLD)
         return results[0].boxes
 
 # Face detector
@@ -508,6 +508,9 @@ class DetectionSystem:
         os.makedirs("faces", exist_ok=True)
         os.makedirs("detections", exist_ok=True)
         
+        
+        time.sleep(2)  
+        
         # Initialize configuration and load the system config
         self.config_manager = ConfigManager(config_path)
         self.config = self.config_manager.get_config()
@@ -621,6 +624,7 @@ class DetectionSystem:
         print(f"{Colors.CYAN}Configuration updated. Telegram status: {self.telegram_service.is_enabled()}{Colors.RESET}")
     
     def process_object_detection(self, frame_resized, frame_original):
+        
         detected_objects = self.object_detector.detect(frame_resized)
         fire_detected = False
         smoke_detected = False
@@ -697,9 +701,9 @@ class DetectionSystem:
         self.running = True
         print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
         
-        # Use processing resolution matching YOLO input (224x224)
-        process_width = 224
-        process_height = 224
+        # Use consistent processing resolution of 320x320
+        process_width = 320
+        process_height = 320
         
         try:
             while self.running:
@@ -724,15 +728,17 @@ class DetectionSystem:
                 
                 if process_full:
                     self.last_detection_time = time.time()
-                    # Full processing pipeline
                     
-                    # Convert to RGB for MediaPipe (face detection)
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    # Resize frame once for all processing
+                    frame_resized = cv2.resize(frame, (process_width, process_height))
+                    
+                    # Convert resized frame to RGB for MediaPipe (face detection)
+                    frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
                     
                     # Process with motion detection
                     motion_detected = False
                     if self.config_manager.is_detection_enabled("motion"):
-                        motion_detected = self.process_motion_detection(frame)
+                        motion_detected = self.process_motion_detection(frame_resized)
                     
                     # Process with face detection
                     face_detected = False
@@ -744,8 +750,6 @@ class DetectionSystem:
                     smoke_detected = False
                     if (self.config_manager.is_detection_enabled("fire") or 
                         self.config_manager.is_detection_enabled("smoke")):
-                        # Resize for better performance with YOLO (224x224)
-                        frame_resized = cv2.resize(frame, (224, 224))
                         fire_detected, smoke_detected = self.process_object_detection(frame_resized, frame)
                     
                     # Process MQ2 gas detection
@@ -781,11 +785,14 @@ class DetectionSystem:
         motion_detected = self.motion_detector.detect(frame)
 
         if motion_detected:
-            print(f"{Colors.BLUE}[{datetime.now().strftime('%H:%M:%S')}] Motion detected (not saved){Colors.RESET}")
+            print(f"{Colors.BLUE}[{datetime.now().strftime('%H:%M:%S')}] Motion detected{Colors.RESET}")
             # Update status without saving image or sending a Telegram alert
             self.system_status = "Motion Detected"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.last_detections["motion"] = timestamp
+            
+            self.telegram_service.send_motion_alert(None)
+            
             return True
         return False
     
