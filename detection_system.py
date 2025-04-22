@@ -774,27 +774,18 @@ class DetectionSystem:
             self.shutdown()
     
     def process_motion_detection(self, frame):
-        """Process frame with motion detector"""
+        """Process frame with motion detector without saving motion images"""
         if not self.config["detection"]["motion"]:
             return False
-        
+
         motion_detected = self.motion_detector.detect(frame)
-        
+
         if motion_detected:
-            print(f"{Colors.BLUE}[{datetime.now().strftime('%H:%M:%S')}] Motion detected{Colors.RESET}")
-            
-            # Update status
+            print(f"{Colors.BLUE}[{datetime.now().strftime('%H:%M:%S')}] Motion detected (not saved){Colors.RESET}")
+            # Update status without saving image or sending a Telegram alert
             self.system_status = "Motion Detected"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.last_detections["motion"] = timestamp
-            
-            # Save motion detection image
-            detection_filename = f"detections/motion_{timestamp}.jpg"
-            cv2.imwrite(detection_filename, frame)
-            
-            # Send Telegram notification if enabled
-            self.telegram_service.send_motion_alert(detection_filename)
-            
             return True
         return False
     

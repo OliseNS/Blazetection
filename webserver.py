@@ -178,20 +178,24 @@ def serve_face(filename):
 
 @app.route('/api/restart', methods=['POST'])
 def restart_detection_system():
-    """Restart the detection system."""
+    """Restart the detection system by shutting it down and reinitializing it."""
     global detection_thread, detection_system
 
     try:
-        # Stop the current detection system
-        if detection_thread and detection_thread.is_alive():
-            detection_system.running = False
-            detection_thread.join(timeout=5)  # Wait for the thread to stop
-
-        # Restart the detection system
+        # Gracefully shutdown the current detection system if running
+        if detection_system:
+            detection_system.shutdown()
+        
+        # Reinitialize detection system (which also reinitializes the camera)
+        from detection_system import init_detection_system, start_detection_system  # Ensure fresh instance
+        detection_system = init_detection_system()
         detection_thread = start_detection_system()
-        time.sleep(2)  # Allow some time for the system to initialize
+        
+        # Allow some time for initialization
+        time.sleep(2)
         tts_queue.put("Detection system restarted successfully.")
         return jsonify({"success": True, "message": "Detection system restarted successfully."}), 200
+
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
