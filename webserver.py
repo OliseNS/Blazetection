@@ -11,7 +11,7 @@ import sys
 import subprocess
 
 # Import the detection system
-from detection_system import init_detection_system, start_detection_system
+from detection_system import init_detection_system, start_detection_system, Camera  # Add Camera here
 
 # Initialize Flask app
 app = Flask(__name__,
@@ -56,7 +56,13 @@ connected_clients = 0
 @app.route('/')
 def index():
     """Render the main dashboard page with camera URL from config"""
-    camera_url = detection_system.config_manager.get_config()["system"].get("camera_url", "http://192.168.1.225:5000")
+    config = detection_system.config_manager.get_config()
+    camera_url = config["system"].get("camera_url", "")
+    # Convert to string if it's a camera index (integer)
+    if isinstance(camera_url, int):
+        camera_url = str(camera_url)
+    elif camera_url is None:
+        camera_url = "0"
     return render_template('index.html', camera_url=camera_url)
 
 @app.route('/api/config', methods=['GET'])
@@ -74,7 +80,7 @@ def update_config():
         return jsonify({"success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+    
 @app.route('/api/status', methods=['GET'])
 def get_status():
     try:
@@ -175,7 +181,7 @@ def restart_system():
         global detection_thread
         if detection_thread and detection_thread.is_alive():
             detection_system.running = False
-            detection_thread.join(timeout=2)  # Wait for up to 2 seconds
+            detection_thread.join(timeout=5)  # Wait for up to 2 seconds
         
         # Clean up resources
         if detection_system:
@@ -198,6 +204,38 @@ def restart_system():
         
     except Exception as e:
         print(f"Restart Error: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/update-camera', methods=['POST'])
+def update_camera_url():
+    """Update the camera URL in the configuration"""
+    try:
+        data = request.json
+        camera_url = data.get('camera_url')
+        
+        if not camera_url:
+            return jsonify({"success": False, "error": "No camera URL provided"}), 400
+        
+        # Try to parse as a number (camera index)
+        try:
+            if camera_url.isdigit():
+                camera_url = int(camera_url)
+        except:
+            pass  # Keep as string if not a valid integer
+        
+        # Update configuration
+        config = detection_system.config_manager.get_config()
+        config["system"]["camera_url"] = camera_url
+        detection_system.config_manager.update_config(config)
+        
+        # Restart the camera with the new URL
+        if hasattr(detection_system, 'camera') and detection_system.camera:
+            detection_system.camera.release()
+        detection_system.camera = Camera(camera_url)
+        
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        print(f"Error updating camera URL: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 def start_web_server(host='0.0.0.0', port=8080):

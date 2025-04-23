@@ -470,7 +470,12 @@ function saveTelegramSettings() {
         .then((response) => response.json())
         .then((data) => {
             if (data.success) {
-                showNotification('Telegram settings saved successfully!', 'success');
+                // Prompt for restart instead of just showing notification
+                if (confirm('Telegram settings saved successfully! The system needs to restart to apply changes. Restart now?')) {
+                    restartSystem();
+                } else {
+                    showNotification('Telegram settings saved. Restart required to apply changes.', 'warning');
+                }
             } else {
                 showNotification('Failed to save Telegram settings.', 'error');
             }
