@@ -346,11 +346,11 @@ class YOLODetector:
 
 # Face detector
 class FaceDetector:
-    def __init__(self, min_detection_confidence=0.97):  
+    def __init__(self, min_detection_confidence=0.8):  
         self.mp_face = mp.solutions.face_detection
         self.face_detection = self.mp_face.FaceDetection(
             min_detection_confidence=min_detection_confidence,
-            model_selection=1  # Use lightweight model for Pi
+            model_selection=0  # Changed to lightweight model (0)
         )
     
     def detect(self, frame_rgb):
