@@ -747,8 +747,8 @@ class DetectionSystem:
         print(f"{Colors.BOLD}{Colors.CYAN}Enhanced detection system started. Press Ctrl+C to exit.{Colors.RESET}")
         
         # Use consistent processing resolution of 320x320
-        process_width = 320
-        process_height = 320
+        process_width = 224
+        process_height = 224
         
         try:
             while self.running:
