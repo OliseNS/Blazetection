@@ -3,12 +3,11 @@ import threading
 import time
 import queue
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
-import pyttsx3
+import subprocess
 import cv2
 import asyncio
 import base64
 import sys
-import subprocess
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system, Camera  # Add Camera here
@@ -27,20 +26,70 @@ tts_queue = queue.Queue()
 
 # Function to process TTS requests from the queue
 def process_tts_queue():
+    # Create voices directory if it doesn't exist
+    voices_dir = os.path.join(os.getcwd(), 'voices')
+    os.makedirs(voices_dir, exist_ok=True)
+    
+    # Check if Piper and voice models are available
+    piper_available = False
+    try:
+        result = subprocess.run(["piper", "--help"], capture_output=True, text=True)
+        piper_available = result.returncode == 0
+    except:
+        print("Piper TTS not found. Make sure it's installed: pip install piper-tts")
+        print("Download voice models from: https://github.com/rhasspy/piper/releases")
+    
+    # Default voice model path
+    model_path = os.path.join(voices_dir, "en_GB-cori-medium.onnx")
+    config_path = os.path.join(voices_dir, "coriconfig.json")
+    
+    # Check if model files exist
+    if not (os.path.exists(model_path) and os.path.exists(config_path)):
+        print(f"Piper voice models not found at {voices_dir}")
+        print("Download them from: https://github.com/rhasspy/piper/releases")
+        piper_available = False
+    
     while True:
         text = tts_queue.get()
         if text is None:
             break
+        
         try:
-            # Initialize a new pyttsx3 engine instance
-            tts_engine = pyttsx3.init()
-            tts_engine.setProperty('rate', 150)  # Adjust speech rate as needed
-            tts_engine.setProperty('volume', 1.0)  # Adjust volume as needed
-            tts_engine.say(text)
-            tts_engine.runAndWait()
-            tts_engine.stop()
+            if piper_available:
+                # Create a temporary file for the text
+                temp_txt = os.path.join(os.getcwd(), "temp_tts.txt")
+                temp_wav = os.path.join(os.getcwd(), "temp_tts.wav")
+                
+                with open(temp_txt, "w", encoding="utf-8") as f:
+                    f.write(text)
+                
+                # Run Piper to generate speech
+                subprocess.run([
+                    "piper",
+                    "--model", model_path,
+                    "--config", config_path,
+                    "--output_file", temp_wav,
+                    "-f", temp_txt
+                ])
+                
+                # Play the audio using a system command
+                if sys.platform == "win32":
+                    subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
+                else:
+                    # For Linux, use aplay
+                    subprocess.run(["aplay", temp_wav])
+                
+                # Clean up temporary files
+                if os.path.exists(temp_txt):
+                    os.remove(temp_txt)
+                if os.path.exists(temp_wav):
+                    os.remove(temp_wav)
+            else:
+                print(f"Piper TTS not available. Skipping speech for: {text}")
+                
         except Exception as e:
             print(f"TTS Processing Error: {str(e)}")
+            
         finally:
             tts_queue.task_done()
 
