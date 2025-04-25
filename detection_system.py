@@ -313,21 +313,94 @@ class Camera:
         """
         if source is None:
             source = 0
-        self.cap = cv2.VideoCapture(source)
-        if not self.cap.isOpened():
-            raise IOError(f"Error accessing camera source: {source}")
-
-        # Remove the resolution setting to keep original camera resolution
-        print(f"Camera initialized with source: {source}")
+        
+        self.source = source
+        self.cap = None
+        self.connect()
+        self.consecutive_failures = 0
+        self.max_failures = 5
+        self.reconnect_delay = 2  # seconds
+        
+    def connect(self):
+        """Establish connection to camera"""
+        try:
+            if self.cap is not None:
+                self.cap.release()
+                
+            # For IP cameras, set additional parameters for better reliability
+            self.cap = cv2.VideoCapture(self.source)
+            
+            # If it's a string (URL), apply specific settings for better reliability
+            if isinstance(self.source, str) and ("http://" in self.source or "rtsp://" in self.source):
+                # Set buffer size to 1 to minimize lag
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                
+                # Set additional parameters for MJPEG streams
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                
+                print(f"{Colors.CYAN}Connected to IP camera stream: {self.source}{Colors.RESET}")
+            
+            if not self.cap.isOpened():
+                raise IOError(f"Error accessing camera source: {self.source}")
+                
+            print(f"{Colors.GREEN}Camera initialized successfully with source: {self.source}{Colors.RESET}")
+            self.consecutive_failures = 0
+        except Exception as e:
+            print(f"{Colors.RED}Failed to connect to camera: {str(e)}{Colors.RESET}")
+            raise
     
     def read_frame(self):
-        """Read a frame from the camera"""
-        return self.cap.read()
+        """Read a frame from the camera with better error handling"""
+        if self.cap is None or not self.cap.isOpened():
+            self.consecutive_failures += 1
+            if self.consecutive_failures >= self.max_failures:
+                print(f"{Colors.YELLOW}Attempting to reconnect to camera...{Colors.RESET}")
+                time.sleep(self.reconnect_delay)
+                try:
+                    self.connect()
+                except:
+                    pass
+            return False, None
+        
+        try:
+            success, frame = self.cap.read()
+            
+            if success:
+                self.consecutive_failures = 0
+                return success, frame
+            else:
+                self.consecutive_failures += 1
+                
+                # If we have multiple consecutive failures, attempt to reconnect
+                if self.consecutive_failures >= self.max_failures:
+                    print(f"{Colors.YELLOW}Multiple frame read failures. Attempting to reconnect...{Colors.RESET}")
+                    time.sleep(self.reconnect_delay)
+                    try:
+                        self.connect()
+                    except:
+                        pass
+                
+                return False, None
+        except Exception as e:
+            print(f"{Colors.RED}Error reading frame: {str(e)}{Colors.RESET}")
+            self.consecutive_failures += 1
+            
+            # If we have multiple consecutive failures, attempt to reconnect
+            if self.consecutive_failures >= self.max_failures:
+                print(f"{Colors.YELLOW}Error persists. Attempting to reconnect...{Colors.RESET}")
+                time.sleep(self.reconnect_delay)
+                try:
+                    self.connect()
+                except:
+                    pass
+                
+            return False, None
 
     def release(self):
         """Release the camera resource"""
         if self.cap:
             self.cap.release()
+            self.cap = None
 
 # YOLO detector
 class YOLODetector:
