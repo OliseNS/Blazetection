@@ -313,62 +313,17 @@ class Camera:
         """
         if source is None:
             source = 0
-        
-        self.source = source
-        self.cap = None
-        self.camera_available = False
-        self.error_message = None
-        
-        try:
-            self.cap = cv2.VideoCapture(source)
-            if not self.cap.isOpened():
-                raise IOError(f"Error accessing camera source: {source}")
-            
-            self.camera_available = True
-            print(f"Camera initialized with source: {source}")
-        except Exception as e:
-            self.error_message = f"Camera source not available: {source}"
-            print(f"Error: {self.error_message}")
+        self.cap = cv2.VideoCapture(source)
+        if not self.cap.isOpened():
+            raise IOError(f"Error accessing camera source: {source}")
+
+        # Remove the resolution setting to keep original camera resolution
+        print(f"Camera initialized with source: {source}")
     
     def read_frame(self):
         """Read a frame from the camera"""
-        if not self.camera_available:
-            # Create a blank frame with an error message when camera is not available
-            frame = self._create_error_frame()
-            return True, frame
-        
-        # If camera is available, read from it as usual
         return self.cap.read()
-    
-    def _create_error_frame(self):
-        """Create an error message frame when camera is not available"""
-        # Create a black frame
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        
-        # Add the error message
-        message = self.error_message or f"Camera source not available: {self.source}"
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.7
-        thickness = 2
-        color = (255, 255, 255)  # White text
-        
-        # Get text size to center it
-        text_size = cv2.getTextSize(message, font, font_scale, thickness)[0]
-        text_x = (frame.shape[1] - text_size[0]) // 2
-        text_y = (frame.shape[0] + text_size[1]) // 2
-        
-        cv2.putText(frame, message, (text_x, text_y), font, font_scale, color, thickness)
-        
-        # Add instruction message
-        instruction = "Update camera URL in settings below"
-        inst_text_size = cv2.getTextSize(instruction, font, font_scale, thickness)[0]
-        inst_text_x = (frame.shape[1] - inst_text_size[0]) // 2
-        inst_text_y = text_y + 40
-        
-        cv2.putText(frame, instruction, (inst_text_x, inst_text_y), font, font_scale, color, thickness)
-        
-        return frame
-    
+
     def release(self):
         """Release the camera resource"""
         if self.cap:
@@ -391,7 +346,7 @@ class YOLODetector:
 
 # Face detector
 class FaceDetector:
-    def __init__(self, min_detection_confidence=0.9):  # Lowered from 0.97
+    def __init__(self, min_detection_confidence=0.8):  
         self.mp_face = mp.solutions.face_detection
         self.face_detection = self.mp_face.FaceDetection(
             min_detection_confidence=min_detection_confidence,
