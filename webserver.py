@@ -26,72 +26,49 @@ tts_queue = queue.Queue()
 
 # Function to process TTS requests from the queue
 def process_tts_queue():
-    # Create voices directory if it doesn't exist
     voices_dir = os.path.join(os.getcwd(), 'voices')
-    os.makedirs(voices_dir, exist_ok=True)
-    
-    # Check if Piper and voice models are available
-    piper_available = False
-    try:
-        result = subprocess.run(["piper", "--help"], capture_output=True, text=True)
-        piper_available = result.returncode == 0
-    except:
-        print("Piper TTS not found. Make sure it's installed: pip install piper-tts")
-        print("Download voice models from: https://github.com/rhasspy/piper/releases")
-    
-    # Default voice model path
-    model_path = os.path.join(voices_dir, "en_GB-cori-medium.onnx")
-    config_path = os.path.join(voices_dir, "coriconfig.json")
-    
-    # Check if model files exist
+    model_path = os.path.join(voices_dir, "en_US-amy-low.onnx")
+    config_path = os.path.join(voices_dir, "vamyconfig.json")
+
     if not (os.path.exists(model_path) and os.path.exists(config_path)):
-        print(f"Piper voice models not found at {voices_dir}")
-        print("Download them from: https://github.com/rhasspy/piper/releases")
-        piper_available = False
-    
+        print(f"Piper model or config not found in {voices_dir}.")
+        return
+
     while True:
         text = tts_queue.get()
         if text is None:
             break
-        
+
         try:
-            if piper_available:
-                # Create a temporary file for the text
-                temp_txt = os.path.join(os.getcwd(), "temp_tts.txt")
+            print(f"[TTS] Speaking: {text}")
+            # Use Piper to synthesize audio and pipe it directly to aplay/ffplay
+            piper_cmd = [
+                "piper",
+                "--model", model_path,
+                "--config", config_path,
+                "--output_file", "-",  # output to stdout
+                "--sentence_silence", "0.3"  # slight pause between sentences
+            ]
+            if sys.platform == "win32":
+                # Windows: Save to file and play with powershell
                 temp_wav = os.path.join(os.getcwd(), "temp_tts.wav")
-                
-                with open(temp_txt, "w", encoding="utf-8") as f:
-                    f.write(text)
-                
-                # Run Piper to generate speech
-                subprocess.run([
-                    "piper",
-                    "--model", model_path,
-                    "--config", config_path,
-                    "--output_file", temp_wav,
-                    "-f", temp_txt
-                ])
-                
-                # Play the audio using a system command
-                if sys.platform == "win32":
-                    subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
-                else:
-                    # For Linux, use aplay
-                    subprocess.run(["aplay", temp_wav])
-                
-                # Clean up temporary files
-                if os.path.exists(temp_txt):
-                    os.remove(temp_txt)
-                if os.path.exists(temp_wav):
-                    os.remove(temp_wav)
+                subprocess.run(piper_cmd + ["-f", "-"], input=text, text=True, stdout=open(temp_wav, "wb"))
+                subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
+                os.remove(temp_wav)
             else:
-                print(f"Piper TTS not available. Skipping speech for: {text}")
-                
+                # Linux/macOS: Stream audio to aplay or ffplay
+                player = ["aplay", "-q"] if sys.platform.startswith("linux") else ["ffplay", "-nodisp", "-autoexit", "-"]
+                piper_proc = subprocess.Popen(piper_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                player_proc = subprocess.Popen(player, stdin=piper_proc.stdout)
+                piper_proc.stdin.write(text.encode('utf-8'))
+                piper_proc.stdin.close()
+                piper_proc.wait()
+                player_proc.wait()
         except Exception as e:
-            print(f"TTS Processing Error: {str(e)}")
-            
+            print(f"[TTS Error] {str(e)}")
         finally:
             tts_queue.task_done()
+
 
 # Start a background thread to process the TTS queue
 tts_thread = threading.Thread(target=process_tts_queue, daemon=True)

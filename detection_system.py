@@ -393,79 +393,55 @@ class MotionDetector:
         # Return true if motion was detected recently (within cooldown period)
         return motion_detected or (current_time - self.last_motion_time < self.motion_cooldown)
 
-class SineWaveAlarm:
-    def __init__(self):
-        self.initialize_audio()
-
-    def initialize_audio(self):
-        """Initialize PyAudio instance and check for available devices"""
+class AudioPlayer:
+    def __init__(self, sound_file="alarm.wav"):
+        """Initialize audio player using aplay for Raspberry Pi"""
+        self.sound_file = sound_file
+        self.process = None
+        self.playing = False
+        
+        # Verify sound file exists
+        if not os.path.exists(self.sound_file):
+            print(f"{Colors.YELLOW}Warning: Sound file {self.sound_file} not found. Alarm will be silent.{Colors.RESET}")
+    
+    def play_sound(self):
+        """Play sound using aplay in a non-blocking way"""
+        if self.playing:
+            return  # Already playing
+            
         try:
-            self.p = pyaudio.PyAudio()
-            # Check if we have any output devices
-            device_count = self.p.get_device_count()
-            if device_count == 0:
-                raise Exception("No audio devices found")
-            
-            # Find a valid output device
-            self.device_index = None
-            for i in range(device_count): # Iterate over a range of device indices
-                device_info = self.p.get_device_info_by_index(i)
-                if device_info['maxOutputChannels'] > 0:
-                    self.device_index = i
-                    break
-            
-            if self.device_index is None:
-                raise Exception("No valid output device found")
-                
-            self.sample_rate = 44100
-            self.duration = 0.45
-            self.low_freq = 800
-            self.high_freq = 1600
-            self.amplitude = 0.5
+            if os.path.exists(self.sound_file):
+                # Start aplay process
+                self.process = subprocess.Popen(
+                    ["aplay", self.sound_file],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                self.playing = True
+            else:
+                print(f"{Colors.YELLOW}Cannot play sound: {self.sound_file} not found{Colors.RESET}")
         except Exception as e:
-            print(f"Error initializing audio: {str(e)}")
-            self.p = None
-
-    def generate_tone(self, frequency, duration=None):
-        if duration is None:
-            duration = self.duration
-        t = np.linspace(0, duration, int(self.sample_rate * duration), False)
-        wave = np.sin(2 * np.pi * frequency * t) * self.amplitude
-        return (wave * 32767).astype(np.int16).tobytes()
-
-    def fire_alarm_siren(self, duration=0.5):
-        try:
-            if self.p is None:
-                self.initialize_audio()
-            if self.p is None:  # If still None after reinitialization
-                return
-
-            stream = self.p.open(format=pyaudio.paInt16,
-                               channels=1,
-                               rate=self.sample_rate,
-                               output=True,
-                               output_device_index=self.device_index)
-            
-            tone_low = self.generate_tone(self.low_freq, duration)
-            tone_high = self.generate_tone(self.high_freq, duration)
-            stream.write(tone_high)
-            stream.write(tone_low)
-            stream.stop_stream()
-            stream.close()
-        except Exception as e:
-            print(f"Error playing alarm: {str(e)}")
-            # Cleanup and reinitialize on error
-            self.cleanup()
-            self.initialize_audio()
-
+            print(f"{Colors.RED}Error playing sound: {str(e)}{Colors.RESET}")
+    
+    def stop_sound(self):
+        """Stop the currently playing sound"""
+        if self.process and self.playing:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=1)
+            except:
+                # Force kill if terminate doesn't work
+                try:
+                    self.process.kill()
+                except:
+                    pass
+            finally:
+                self.process = None
+                self.playing = False
+    
     def cleanup(self):
-        """Safely cleanup PyAudio resources"""
-        try:
-            if hasattr(self, 'p') and self.p is not None:
-                self.p.terminate()
-                self.p = None
-        except Exception as e:
-            print(f"Error during audio cleanup: {str(e)}")
+        """Clean up resources"""
+        self.stop_sound()
 
 # MQ2 Gas Sensor Handler
 class MQ2Sensor:
@@ -557,8 +533,8 @@ class DetectionSystem:
         self.alarm_playing = False
         self.alarm_thread = None
         
-        # Replace pygame.mixer.init() with SineWaveAlarm
-        self.alarm = SineWaveAlarm()
+        # Replace pygame.mixer.init() with AudioPlayer
+        self.alarm = AudioPlayer("alarm.wav")  # Use your compressed sound file
         
         # Initialize Telegram service
         self.telegram_service = TelegramService(self.config_manager)
@@ -974,7 +950,7 @@ class DetectionSystem:
             self.system_status = "Normal"
 
     def play_alarm_sound(self):
-        """Play alarm sound in a thread-safe manner with short beep cycles"""
+        """Play alarm sound in a thread-safe manner"""
         if self.alarm_playing:
             return  # Already playing
 
@@ -983,11 +959,12 @@ class DetectionSystem:
         def alarm_loop():
             try:
                 while self.alarm_playing and self.running:
-                    self.alarm.fire_alarm_siren(duration=0.5)
-                    time.sleep(0.05)  # Small delay between beeps
+                    self.alarm.play_sound()
+                    time.sleep(5)  # Wait for sound to complete or loop
             except Exception as e:
                 print(f"Error in alarm loop: {str(e)}")
             finally:
+                self.alarm.stop_sound()
                 self.alarm_playing = False
 
         if self.alarm_thread and self.alarm_thread.is_alive():
