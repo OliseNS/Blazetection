@@ -47,14 +47,15 @@ def initialize_tts_process():
         return False
         
     try:
-        # Optimize parameters for speed (removed unsupported parameter)
+        # Optimize parameters for speed
         piper_cmd = [
             "piper",
             "--model", preloaded_model_path,
             "--config", preloaded_config_path,
             "--output_file", "-",
-            "--sentence-silence", "0.01",  # Minimal silence between sentences
-            "--length-scale", "0.85"       # Even faster speech rate
+            "--sentence_silence", "0.05",  # Minimal silence between sentences
+            "--length-scale", "0.85",      # Even faster speech rate
+            "--stdin-format", "lines"      # Process line by line for lower latency
         ]
         
         # Start the persistent processes
