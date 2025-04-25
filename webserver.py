@@ -28,7 +28,7 @@ tts_queue = queue.Queue()
 def process_tts_queue():
     voices_dir = os.path.join(os.getcwd(), 'voices')
     model_path = os.path.join(voices_dir, "en_US-amy-low.onnx")
-    config_path = os.path.join(voices_dir, "vamyconfig.json")
+    config_path = os.path.join(voices_dir, "amyconfig.json")
 
     if not (os.path.exists(model_path) and os.path.exists(config_path)):
         print(f"Piper model or config not found in {voices_dir}.")
@@ -68,7 +68,6 @@ def process_tts_queue():
             print(f"[TTS Error] {str(e)}")
         finally:
             tts_queue.task_done()
-
 
 # Start a background thread to process the TTS queue
 tts_thread = threading.Thread(target=process_tts_queue, daemon=True)
