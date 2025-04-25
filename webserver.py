@@ -2,8 +2,12 @@ import os
 import threading
 import time
 import queue
-from flask import Flask, render_template, request, jsonify, send_from_directory
-import pyttsx3
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+import subprocess
+import cv2
+import asyncio
+import base64
+import sys
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -13,6 +17,7 @@ app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 
+
 # Initialize detection system
 detection_system = init_detection_system()
 
@@ -21,20 +26,46 @@ tts_queue = queue.Queue()
 
 # Function to process TTS requests from the queue
 def process_tts_queue():
+    voices_dir = os.path.join(os.getcwd(), 'voices')
+    model_path = os.path.join(voices_dir, "en_US-amy-low.onnx")
+    config_path = os.path.join(voices_dir, "amyconfig.json")
+
+    if not (os.path.exists(model_path) and os.path.exists(config_path)):
+        print(f"Piper model or config not found in {voices_dir}.")
+        return
+
     while True:
         text = tts_queue.get()
         if text is None:
             break
+
         try:
-            # Initialize a new pyttsx3 engine instance
-            tts_engine = pyttsx3.init()
-            tts_engine.setProperty('rate', 150)  # Adjust speech rate as needed
-            tts_engine.setProperty('volume', 1.0)  # Adjust volume as needed
-            tts_engine.say(text)
-            tts_engine.runAndWait()
-            tts_engine.stop()
+            print(f"[TTS] Speaking: {text}")
+            # Use Piper to synthesize audio and pipe it directly to aplay/ffplay
+            piper_cmd = [
+                "piper",
+                "--model", model_path,
+                "--config", config_path,
+                "--output_file", "-",  # output to stdout
+                "--sentence_silence", "0.3"  # slight pause between sentences
+            ]
+            if sys.platform == "win32":
+                # Windows: Save to file and play with powershell
+                temp_wav = os.path.join(os.getcwd(), "temp_tts.wav")
+                subprocess.run(piper_cmd + ["-f", "-"], input=text, text=True, stdout=open(temp_wav, "wb"))
+                subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
+                os.remove(temp_wav)
+            else:
+                # Linux/macOS: Stream audio to aplay or ffplay
+                player = ["aplay", "-q"] if sys.platform.startswith("linux") else ["ffplay", "-nodisp", "-autoexit", "-"]
+                piper_proc = subprocess.Popen(piper_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                player_proc = subprocess.Popen(player, stdin=piper_proc.stdout)
+                piper_proc.stdin.write(text.encode('utf-8'))
+                piper_proc.stdin.close()
+                piper_proc.wait()
+                player_proc.wait()
         except Exception as e:
-            print(f"TTS Processing Error: {str(e)}")
+            print(f"[TTS Error] {str(e)}")
         finally:
             tts_queue.task_done()
 
@@ -45,10 +76,13 @@ tts_thread.start()
 # Start detection system in a separate thread
 detection_thread = None
 
+connected_clients = 0
+
 @app.route('/')
 def index():
-    """Render the main dashboard page"""
-    return render_template('index.html')
+    """Render the main dashboard page with camera URL from config"""
+    camera_url = detection_system.config_manager.get_config()["system"].get("camera_url", "http://192.168.1.225:5000")
+    return render_template('index.html', camera_url=camera_url)
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
@@ -128,7 +162,6 @@ def get_statistics():
 
 @app.route('/api/detections', methods=['GET'])
 def get_detections():
-    """Get a list of detection images"""
     try:
         detection_folder = os.path.join(os.getcwd(), 'detections')
         if not os.path.exists(detection_folder):
@@ -156,6 +189,41 @@ def serve_face(filename):
     """Serve face images"""
     return send_from_directory('faces', filename)
 
+@app.route('/api/restart', methods=['POST'])
+def restart_system():
+    """Restart the entire application (web server and detection system)"""
+    try:
+        # Announce restart via TTS
+        tts_queue.put("System is restarting. Please wait.")
+        
+        # Stop the detection system gracefully if it's running
+        global detection_thread
+        if detection_thread and detection_thread.is_alive():
+            detection_system.running = False
+            detection_thread.join(timeout=2)  # Wait for up to 2 seconds
+        
+        # Clean up resources
+        if detection_system:
+            detection_system.shutdown()
+        
+        # First send a response that the restart is in progress
+        response = jsonify({"success": True, "message": "System is restarting..."})
+        
+        # Schedule the restart after the response is sent
+        def restart_after_response():
+            time.sleep(1)  # Give time for the response to be sent
+            # Start a new process with the same command and arguments
+            subprocess.Popen([sys.executable] + sys.argv)
+            # Exit the current process
+            os._exit(0)
+        
+        threading.Thread(target=restart_after_response, daemon=True).start()
+        
+        return response
+        
+    except Exception as e:
+        print(f"Restart Error: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""
@@ -163,16 +231,18 @@ def start_web_server(host='0.0.0.0', port=8080):
 
     if detection_thread is None or not detection_thread.is_alive():
         detection_thread = start_detection_system()
-        time.sleep(1)
-
-    app.run(host=host, port=port, threaded=True)
+        time.sleep(2)
+        tts_queue.put("System started successfully.")
+        
+        # Send Telegram welcome message after system is ready
+        detection_system.telegram_service.send_welcome_message()
 
 if __name__ == '__main__':
     os.makedirs('faces', exist_ok=True)
     os.makedirs('detections', exist_ok=True)
-
     print(f"Starting web server on http://0.0.0.0:8080")
     print(f"Detection system will run in the background")
     print(f"Press Ctrl+C to exit")
 
     start_web_server()
+    app.run(host='0.0.0.0', port=8080)
