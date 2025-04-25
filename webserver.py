@@ -2,11 +2,8 @@ import os
 import threading
 import time
 import queue
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import subprocess
-import cv2
-import asyncio
-import base64
 import sys
 
 # Import the detection system
@@ -24,14 +21,29 @@ detection_system = init_detection_system()
 # Create a queue for TTS requests
 tts_queue = queue.Queue()
 
-# Function to process TTS requests from the queue
-def process_tts_queue():
+
+def preload_tts_model():
     voices_dir = os.path.join(os.getcwd(), 'voices')
     model_path = os.path.join(voices_dir, "en_US-amy-low.onnx")
     config_path = os.path.join(voices_dir, "amyconfig.json")
 
     if not (os.path.exists(model_path) and os.path.exists(config_path)):
-        print(f"Piper model or config not found in {voices_dir}.")
+        raise FileNotFoundError(f"Piper model or config not found in {voices_dir}.")
+
+    return model_path, config_path
+
+# load the TTS model and configuration
+try:
+    preloaded_model_path, preloaded_config_path = preload_tts_model()
+    print("[TTS] Model and configuration preloaded successfully.")
+except FileNotFoundError as e:
+    print(f"[TTS Error] {str(e)}")
+    preloaded_model_path, preloaded_config_path = None, None
+
+# Function to process TTS requests from the queue
+def process_tts_queue():
+    if not preloaded_model_path or not preloaded_config_path:
+        print("[TTS] Model or configuration not preloaded. Skipping TTS processing.")
         return
 
     while True:
@@ -41,16 +53,15 @@ def process_tts_queue():
 
         try:
             print(f"[TTS] Speaking: {text}")
-            # Use Piper to synthesize audio and pipe it directly to aplay/ffplay
             piper_cmd = [
                 "piper",
-                "--model", model_path,
-                "--config", config_path,
-                "--output_file", "-",  # output to stdout
-                "--sentence_silence", "0.3"  # slight pause between sentences
+                "--model", preloaded_model_path,
+                "--config", preloaded_config_path,
+                "--output_file", "-", 
+                "--sentence_silence", "0.3"  
             ]
             if sys.platform == "win32":
-                # Windows: Save to file and play with powershell
+                
                 temp_wav = os.path.join(os.getcwd(), "temp_tts.wav")
                 subprocess.run(piper_cmd + ["-f", "-"], input=text, text=True, stdout=open(temp_wav, "wb"))
                 subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
