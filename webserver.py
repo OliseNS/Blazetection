@@ -5,8 +5,6 @@ import queue
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import subprocess
 import sys
-import signal
-import atexit
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -23,13 +21,9 @@ detection_system = init_detection_system()
 # Create a queue for TTS requests
 tts_queue = queue.Queue()
 
-# Global variables for persistent TTS processes
-piper_proc = None
-player_proc = None
 
 def preload_tts_model():
     voices_dir = os.path.join(os.getcwd(), 'voices')
-    # Use a faster model - consider switching to "en_US-amy-medium" if it exists
     model_path = os.path.join(voices_dir, "en_US-amy-low.onnx")
     config_path = os.path.join(voices_dir, "amyconfig.json")
 
@@ -38,73 +32,18 @@ def preload_tts_model():
 
     return model_path, config_path
 
-# Initialize the persistent TTS process
-def initialize_tts_process():
-    global piper_proc, player_proc
-    
-    if not preloaded_model_path or not preloaded_config_path:
-        print("[TTS] Model or configuration not available. Cannot initialize TTS process.")
-        return False
-        
-    try:
-        # Optimize parameters for speed
-        piper_cmd = [
-            "piper",
-            "--model", preloaded_model_path,
-            "--config", preloaded_config_path,
-            "--output_file", "-",
-            "--sentence_silence", "0.05",  # Minimal silence between sentences
-            "--length-scale", "0.85",      # Even faster speech rate
-            "--stdin-format", "lines"      # Process line by line for lower latency
-        ]
-        
-        # Start the persistent processes
-        piper_proc = subprocess.Popen(piper_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        player_proc = subprocess.Popen(["aplay", "-q"], stdin=piper_proc.stdout)
-        
-        print("[TTS] Persistent TTS process initialized successfully.")
-        return True
-    except Exception as e:
-        print(f"[TTS Error] Failed to initialize persistent process: {str(e)}")
-        return False
-
-# Clean up TTS processes
-def cleanup_tts_processes():
-    global piper_proc, player_proc
-    
-    try:
-        if piper_proc:
-            print("[TTS] Shutting down persistent TTS process...")
-            piper_proc.stdin.close()
-            piper_proc.terminate()
-            piper_proc.wait(timeout=1)
-            
-        if player_proc:
-            player_proc.terminate()
-            player_proc.wait(timeout=1)
-    except Exception as e:
-        print(f"[TTS Error] Error during cleanup: {str(e)}")
-
-# Register cleanup function
-atexit.register(cleanup_tts_processes)
-
 # load the TTS model and configuration
 try:
     preloaded_model_path, preloaded_config_path = preload_tts_model()
     print("[TTS] Model and configuration preloaded successfully.")
-    # Initialize the persistent TTS process
-    tts_initialized = initialize_tts_process()
 except FileNotFoundError as e:
     print(f"[TTS Error] {str(e)}")
     preloaded_model_path, preloaded_config_path = None, None
-    tts_initialized = False
 
 # Function to process TTS requests from the queue
 def process_tts_queue():
-    global piper_proc, player_proc
-    
-    if not tts_initialized:
-        print("[TTS] TTS not initialized. Skipping TTS processing.")
+    if not preloaded_model_path or not preloaded_config_path:
+        print("[TTS] Model or configuration not preloaded. Skipping TTS processing.")
         return
 
     while True:
@@ -114,22 +53,30 @@ def process_tts_queue():
 
         try:
             print(f"[TTS] Speaking: {text}")
-            
-            # Check if process is still alive
-            if piper_proc.poll() is not None or player_proc.poll() is not None:
-                print("[TTS] Restarting TTS process...")
-                cleanup_tts_processes()
-                initialize_tts_process()
-            
-            # Send text to the persistent process
-            piper_proc.stdin.write((text + '\n').encode('utf-8'))
-            piper_proc.stdin.flush()  # Important to ensure text is processed immediately
-            
+            piper_cmd = [
+                "piper",
+                "--model", preloaded_model_path,
+                "--config", preloaded_config_path,
+                "--output_file", "-", 
+                "--sentence_silence", "0.3"  
+            ]
+            if sys.platform == "win32":
+                
+                temp_wav = os.path.join(os.getcwd(), "temp_tts.wav")
+                subprocess.run(piper_cmd + ["-f", "-"], input=text, text=True, stdout=open(temp_wav, "wb"))
+                subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
+                os.remove(temp_wav)
+            else:
+                # Linux/macOS: Stream audio to aplay or ffplay
+                player = ["aplay", "-q"] if sys.platform.startswith("linux") else ["ffplay", "-nodisp", "-autoexit", "-"]
+                piper_proc = subprocess.Popen(piper_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                player_proc = subprocess.Popen(player, stdin=piper_proc.stdout)
+                piper_proc.stdin.write(text.encode('utf-8'))
+                piper_proc.stdin.close()
+                piper_proc.wait()
+                player_proc.wait()
         except Exception as e:
             print(f"[TTS Error] {str(e)}")
-            # Try to reinitialize the process if there's an error
-            cleanup_tts_processes()
-            initialize_tts_process()
         finally:
             tts_queue.task_done()
 
