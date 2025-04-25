@@ -1,13 +1,12 @@
 import os
-import threading
+import uuid
 import time
 import queue
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+import threading
 import subprocess
-import cv2
-import asyncio
-import base64
 import sys
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -225,6 +224,90 @@ def restart_system():
         print(f"Restart Error: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/audio/upload', methods=['POST'])
+def upload_audio():
+    """Save uploaded audio recording"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({"success": False, "error": "No audio file provided"}), 400
+            
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({"success": False, "error": "No selected file"}), 400
+            
+        # Create a unique ID and filename
+        recording_id = str(uuid.uuid4())
+        recordings_dir = os.path.join(os.getcwd(), 'recordings')
+        os.makedirs(recordings_dir, exist_ok=True)
+        
+        filename = f"{recording_id}.wav"
+        filepath = os.path.join(recordings_dir, filename)
+        
+        # Save the file
+        audio_file.save(filepath)
+        
+        return jsonify({
+            "success": True, 
+            "id": recording_id,
+            "message": "Recording saved successfully"
+        }), 200
+        
+    except Exception as e:
+        print(f"Error saving audio recording: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/audio/play/<recording_id>', methods=['POST'])
+def play_audio(recording_id):
+    """Play the audio recording using aplay"""
+    try:
+        recordings_dir = os.path.join(os.getcwd(), 'recordings')
+        filepath = os.path.join(recordings_dir, f"{recording_id}.wav")
+        
+        if not os.path.exists(filepath):
+            return jsonify({"success": False, "error": "Recording not found"}), 404
+            
+        # Play the audio file in a separate thread to avoid blocking
+        def play_audio_file():
+            if sys.platform == "win32":
+                # Windows
+                subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{filepath}').PlaySync()"])
+            else:
+                # Linux
+                subprocess.run(["aplay", "-q", filepath])
+                
+        threading.Thread(target=play_audio_file, daemon=True).start()
+        
+        return jsonify({
+            "success": True,
+            "message": "Playing audio recording"
+        }), 200
+        
+    except Exception as e:
+        print(f"Error playing audio recording: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/audio/delete/<recording_id>', methods=['DELETE'])
+def delete_audio(recording_id):
+    """Delete an audio recording"""
+    try:
+        recordings_dir = os.path.join(os.getcwd(), 'recordings')
+        filepath = os.path.join(recordings_dir, f"{recording_id}.wav")
+        
+        if not os.path.exists(filepath):
+            return jsonify({"success": False, "error": "Recording not found"}), 404
+            
+        # Delete the file
+        os.remove(filepath)
+        
+        return jsonify({
+            "success": True,
+            "message": "Recording deleted successfully"
+        }), 200
+        
+    except Exception as e:
+        print(f"Error deleting audio recording: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 def start_web_server(host='0.0.0.0', port=8080):
     """Start the Flask web server"""
     global detection_thread
@@ -240,6 +323,7 @@ def start_web_server(host='0.0.0.0', port=8080):
 if __name__ == '__main__':
     os.makedirs('faces', exist_ok=True)
     os.makedirs('detections', exist_ok=True)
+    os.makedirs('recordings', exist_ok=True)
     print(f"Starting web server on http://0.0.0.0:8080")
     print(f"Detection system will run in the background")
     print(f"Press Ctrl+C to exit")
