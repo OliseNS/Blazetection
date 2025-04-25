@@ -781,117 +781,8 @@
             }
         }
 
-        /* Audio Recorder Styles */
-.audio-recorder-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
+        
 
-.recorder-controls {
-    display: flex;
-    align-items: center;
-    margin-bottom: 15px;
-    padding: 10px;
-    background-color: var(--light-color);
-    border-radius: var(--border-radius-sm);
-}
-
-.record-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background-color: var(--danger-color);
-    color: white;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-.record-btn i {
-    font-size: 24px;
-}
-
-.record-btn.recording {
-    animation: pulse 1.2s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-    100% {
-        transform: scale(1);
-    }
-}
-
-#recording-status {
-    font-size: 14px;
-    color: var(--gray-dark);
-    flex: 1;
-}
-
-.recording-history {
-    flex: 1;
-    background-color: var(--light-color);
-    border-radius: var(--border-radius-sm);
-    padding: 10px;
-    overflow-y: auto;
-}
-
-.recording-item {
-    display: flex;
-    align-items: center;
-    background-color: white;
-    padding: 10px;
-    border-radius: var(--border-radius-sm);
-    margin-bottom: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.recording-time {
-    flex: 1;
-    font-size: 14px;
-}
-
-.recording-controls {
-    display: flex;
-    gap: 5px;
-}
-
-.play-btn, .delete-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-}
-
-.play-btn {
-    color: var(--primary-color);
-}
-
-.delete-btn {
-    color: var(--danger-color);
-}
-
-.no-recordings {
-    text-align: center;
-    padding: 15px;
-    color: var(--gray-color);
-}
 
     </style>
 </head>
@@ -946,25 +837,25 @@
                     </div>
                 </div>
 
-                <!-- Audio Recorder -->
+                <!-- Text-to-Speech -->
                 <div class="card">
                     <div class="card-header">
                         <div class="card-header-left">
-                            <i class="fas fa-microphone"></i>
-                            <h2>&nbsp;Audio Recorder</h2>
+                            <i class="fas fa-volume-up"></i>
+                            <h2>&nbsp;Text-to-Speech</h2>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="audio-recorder-container">
-                            <div class="recorder-controls">
-                                <button id="record-btn" class="record-btn" title="Record audio (5 seconds)">
-                                    <i class="fas fa-microphone"></i>
+                        <div class="tts-container">
+                            <div class="tts-input">
+                                <input type="text" id="tts-text" placeholder="Enter text to speak...">
+                                <button id="tts-speak-btn" title="Speak Text">
+                                    <i class="fas fa-play"></i>
                                 </button>
-                                <div id="recording-status">Click to record (5s)</div>
                             </div>
-                            <div class="recording-history" id="recording-history">
-                                <!-- Recording history will be populated here -->
-                                <div class="no-recordings">No recordings yet</div>
+                            <div class="tts-history" id="tts-history">
+                                <!-- TTS history will be populated here -->
+                                <div class="no-faces">No TTS history yet</div>
                             </div>
                         </div>
                     </div>
@@ -1143,4 +1034,4 @@
 </script>
 
 </body>
-</html>
+</html> 

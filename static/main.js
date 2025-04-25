@@ -24,16 +24,13 @@ const videoFeed = document.getElementById('live-feed');
 const frameCount = document.getElementById('frames-processed');
 const statusSummary = document.getElementById('current-status');
 const detectionGallery = document.getElementById('detection-gallery');
-const recordBtn = document.getElementById('record-btn');
-const recordingStatus = document.getElementById('recording-status');
-const recordingHistory = document.getElementById('recording-history');
 
 // Configuration and Status
 let config = {};
 let systemStatus = 'Normal';
 
-// Array to store audio recordings
-let recordings = [];
+// Array to store TTS history
+let ttsHistory = [];
 
 // Debounce function to limit function calls for better performance
 function debounce(func, wait) {
@@ -405,183 +402,38 @@ function setupEventListeners() {
         if (event.key === 'Escape' && faceModal.style.display === 'flex') closeModalFunc();
     });
 
-    // Setup the audio recorder
-    setupAudioRecorder();
-}
+    ttsSpeakBtn.addEventListener('click', () => {
+        const text = ttsTextInput.value.trim();
+        if (!text) {
+            showNotification('Please enter some text.', 'warning');
+            return;
+        }
 
-// Add audio recording and playback functions
-function setupAudioRecorder() {
-    let mediaRecorder;
-    let audioChunks = [];
-    let isRecording = false;
-    let recordingTimer;
-    
-    // Request permission to use the microphone
-    recordBtn.addEventListener('click', () => {
-        if (isRecording) return;
-        
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                isRecording = true;
-                recordBtn.classList.add('recording');
-                recordingStatus.textContent = 'Recording... (5s)';
-                
-                // Create a new media recorder
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                
-                // Add data when available
-                mediaRecorder.addEventListener('dataavailable', event => {
-                    audioChunks.push(event.data);
-                });
-                
-                // When recording stops
-                mediaRecorder.addEventListener('stop', () => {
-                    // Create the audio blob
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    
-                    // Upload the recording
-                    uploadRecording(audioBlob);
-                    
-                    // Stop all audio tracks
-                    stream.getTracks().forEach(track => track.stop());
-                    
-                    // Reset recording state
-                    isRecording = false;
-                    recordBtn.classList.remove('recording');
-                    recordingStatus.textContent = 'Click to record (5s)';
-                });
-                
-                // Start recording
-                mediaRecorder.start();
-                
-                // Stop after 5 seconds
-                setTimeout(() => {
-                    if (mediaRecorder.state !== 'inactive') {
-                        mediaRecorder.stop();
+        fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.success) {
+                    showNotification('Text is being spoken on the Raspberry Pi.', 'success');
+
+                    // Add text to history only if it's not already present
+                    if (!ttsHistory.includes(text)) {
+                        ttsHistory.unshift(text); // Add to the beginning
+                        if (ttsHistory.length > 5) {
+                            ttsHistory.pop(); // Remove the oldest item
+                        }
                     }
-                }, 5000);
+
+                    // Update the TTS history UI
+                    updateTTSHistoryUI();
+                } else {
+                    showNotification('Failed to process TTS.', 'error');
+                }
             })
-            .catch(error => {
-                console.error('Error accessing microphone:', error);
-                showNotification('Unable to access microphone. Please check permissions.', 'error');
-                isRecording = false;
-                recordBtn.classList.remove('recording');
-                recordingStatus.textContent = 'Click to record (5s)';
-            });
-    });
-}
-
-// Upload recording to server
-function uploadRecording(audioBlob) {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.wav');
-    
-    fetch('/api/audio/upload', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Add recording to history
-            recordings.unshift({
-                id: data.id,
-                timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-            });
-            
-            // Update UI
-            updateRecordingHistoryUI();
-            showNotification('Recording saved successfully!', 'success');
-        } else {
-            showNotification('Failed to save recording', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error uploading recording:', error);
-        showNotification('Error saving recording', 'error');
-    });
-}
-
-// Play a recording
-function playRecording(id) {
-    fetch(`/api/audio/play/${id}`, {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showNotification('Playing recording...', 'info');
-        } else {
-            showNotification('Failed to play recording', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error playing recording:', error);
-        showNotification('Error playing recording', 'error');
-    });
-}
-
-// Delete a recording
-function deleteRecording(id) {
-    fetch(`/api/audio/delete/${id}`, {
-        method: 'DELETE'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Remove from recordings array
-            recordings = recordings.filter(rec => rec.id !== id);
-            
-            // Update UI
-            updateRecordingHistoryUI();
-            showNotification('Recording deleted', 'success');
-        } else {
-            showNotification('Failed to delete recording', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error deleting recording:', error);
-        showNotification('Error deleting recording', 'error');
-    });
-}
-
-// Function to update recording history UI
-function updateRecordingHistoryUI() {
-    const recordingHistoryContainer = document.getElementById('recording-history');
-    recordingHistoryContainer.innerHTML = ''; // Clear existing history
-    
-    if (recordings.length === 0) {
-        recordingHistoryContainer.innerHTML = '<div class="no-recordings">No recordings yet</div>';
-        return;
-    }
-    
-    recordings.forEach(recording => {
-        const recordingItem = document.createElement('div');
-        recordingItem.className = 'recording-item';
-        
-        recordingItem.innerHTML = `
-            <div class="recording-time">
-                Recording from ${recording.timestamp}
-            </div>
-            <div class="recording-controls">
-                <button class="play-btn" title="Play recording">
-                    <i class="fas fa-play"></i>
-                </button>
-                <button class="delete-btn" title="Delete recording">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        `;
-        
-        // Add event listeners
-        const playBtn = recordingItem.querySelector('.play-btn');
-        const deleteBtn = recordingItem.querySelector('.delete-btn');
-        
-        playBtn.addEventListener('click', () => playRecording(recording.id));
-        deleteBtn.addEventListener('click', () => deleteRecording(recording.id));
-        
-        recordingHistoryContainer.appendChild(recordingItem);
+            .catch(() => showNotification('Error with TTS. Please try again.', 'error'));
     });
 }
 
@@ -695,6 +547,43 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+// Function to update TTS history UI
+function updateTTSHistoryUI() {
+    const ttsHistoryContainer = document.getElementById('tts-history');
+    ttsHistoryContainer.innerHTML = ''; // Clear existing history
+
+    if (ttsHistory.length === 0) {
+        ttsHistoryContainer.innerHTML = '<div class="no-faces">No TTS history yet</div>';
+        return;
+    }
+
+    ttsHistory.forEach((text, index) => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'tts-history-item';
+        historyItem.textContent = text;
+
+        // Add click event to replay the text
+        historyItem.addEventListener('click', () => {
+            fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.success) {
+                        showNotification(`Replaying: "${text}"`, 'success');
+                    } else {
+                        showNotification('Failed to replay TTS.', 'error');
+                    }
+                })
+                .catch(() => showNotification('Error replaying TTS. Please try again.', 'error'));
+        });
+
+        ttsHistoryContainer.appendChild(historyItem);
+    });
+}
+
 // Refresh header stats
 function refreshHeaderStats() {
     setInterval(() => {
@@ -707,6 +596,7 @@ function refreshHeaderStats() {
             .catch((error) => console.error('Error refreshing header stats:', error));
     }, 500); // Refresh every 0.5 seconds
 }
+
 
 // Initialize the dashboard when the page loads
 document.addEventListener('DOMContentLoaded', () => {
