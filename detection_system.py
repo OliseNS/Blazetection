@@ -8,9 +8,13 @@ from ultralytics import YOLO
 import mediapipe as mp
 from scipy.spatial.distance import euclidean
 from datetime import datetime
+import pygame
 from telegram import Bot, InputFile
 from telegram.ext import Application, ApplicationBuilder
 import asyncio
+import flask
+from flask import Flask, render_template, request, jsonify, send_from_directory
+import pyaudio
 import numpy as np
 import struct
 import subprocess
@@ -529,8 +533,8 @@ class DetectionSystem:
         self.alarm_playing = False
         self.alarm_thread = None
         
-
-        self.alarm = AudioPlayer("alarm.wav") 
+        # Replace pygame.mixer.init() with AudioPlayer
+        self.alarm = AudioPlayer("alarm.wav")  # Use your compressed sound file
         
         # Initialize Telegram service
         self.telegram_service = TelegramService(self.config_manager)
