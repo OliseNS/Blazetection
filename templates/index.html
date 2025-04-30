@@ -828,10 +828,10 @@
                         </div>
                     </div>
                     <div class="card-body" style="padding: 0;">
-                        <div style="padding: 10px; background-color: var(--light-color);">
+                        <div style="padding: 10px; background-color: var(--light-color); display: flex; align-items: center; gap: 10px;">
                             <label for="camera-url-input" style="font-size: 14px; font-weight: 500;">Camera URL:</label>
-                            <input type="text" id="camera-url-input" value="{{ camera_url }}" placeholder="Enter new camera URL" style="width: calc(100% - 20px); margin-top: 5px; padding: 8px; border: 1px solid var(--gray-light); border-radius: var(--border-radius-sm);">
-                            <button id="save-camera-url-btn" class="btn btn-primary" style="margin-top: 10px;">Save</button>
+                            <input type="text" id="camera-url-input" value="{{ camera_url }}" placeholder="Enter new camera URL" style="flex: 1; padding: 8px; border: 1px solid var(--gray-light); border-radius: var(--border-radius-sm);">
+                            <button id="save-camera-url-btn" class="btn btn-primary">Save</button>
                         </div>
                         <div class="video-container" style="border-radius: 0 0 var(--border-radius-sm) var(--border-radius-sm);">
                             <iframe src="{{ camera_url }}" title="Live Camera Feed" allowfullscreen></iframe>
