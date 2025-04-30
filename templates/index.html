@@ -828,12 +828,18 @@
                         </div>
                     </div>
                     <div class="card-body" style="padding: 0;">
-                        <div class="video-container">
+                        <div style="padding: 10px; background-color: var(--light-color);">
+                            <label for="camera-url-input" style="font-size: 14px; font-weight: 500;">Camera URL:</label>
+                            <input type="text" id="camera-url-input" value="{{ camera_url }}" placeholder="Enter new camera URL" style="width: calc(100% - 20px); margin-top: 5px; padding: 8px; border: 1px solid var(--gray-light); border-radius: var(--border-radius-sm);">
+                            <button id="save-camera-url-btn" class="btn btn-primary" style="margin-top: 10px;">Save</button>
+                        </div>
+                        <div class="video-container" style="border-radius: 0 0 var(--border-radius-sm) var(--border-radius-sm);">
                             <iframe src="{{ camera_url }}" title="Live Camera Feed" allowfullscreen></iframe>
                             <button id="fullscreen-btn" class="fullscreen-button" title="Enter Fullscreen">
                                 <i class="fas fa-expand"></i>
                             </button>
                         </div>
+                        
                     </div>
                 </div>
 
@@ -1031,7 +1037,30 @@
             iframe.msRequestFullscreen();
         }
     });
+
+    document.getElementById('save-camera-url-btn').addEventListener('click', function () {
+        const newCameraUrl = document.getElementById('camera-url-input').value.trim();
+        if (newCameraUrl) {
+            fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ section: 'system', values: { camera_url: newCameraUrl } }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Camera URL updated successfully!');
+                        location.reload(); // Reload the page to apply the new URL
+                    } else {
+                        alert('Failed to update Camera URL.');
+                    }
+                })
+                .catch(() => alert('Error updating Camera URL.'));
+        } else {
+            alert('Please enter a valid Camera URL.');
+        }
+    });
 </script>
 
 </body>
-</html> 
+</html>

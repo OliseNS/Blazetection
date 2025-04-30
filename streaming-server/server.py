@@ -2,7 +2,7 @@ from flask import Flask, Response
 import cv2
 
 app = Flask(__name__)
-camera = cv2.VideoCapture(0)  # Use 0 for default webcam
+camera = cv2.VideoCapture(0)  
 
 def generate_frames():
     while True:
