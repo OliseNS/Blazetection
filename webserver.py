@@ -2,11 +2,8 @@ import os
 import threading
 import time
 import queue
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import subprocess
-import cv2
-import asyncio
-import base64
 import sys
 from gtts import gTTS  
 

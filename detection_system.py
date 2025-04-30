@@ -3,20 +3,13 @@ import cv2
 import os
 import time
 import json
-import shutil
 from ultralytics import YOLO
 import mediapipe as mp
 from scipy.spatial.distance import euclidean
 from datetime import datetime
-import pygame
-from telegram import Bot, InputFile
-from telegram.ext import Application, ApplicationBuilder
+from telegram import InputFile
+from telegram.ext import ApplicationBuilder
 import asyncio
-import flask
-from flask import Flask, render_template, request, jsonify, send_from_directory
-import pyaudio
-import numpy as np
-import struct
 import subprocess
 
 try:
