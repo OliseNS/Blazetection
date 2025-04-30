@@ -332,8 +332,7 @@ class Camera:
             
             # If it's a string (URL), apply specific settings for better reliability
             if isinstance(self.source, str) and ("http://" in self.source or "rtsp://" in self.source):
-                # Set buffer size to 1 to minimize lag
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3) 
                 
                 # Set additional parameters for MJPEG streams
                 self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
@@ -412,7 +411,6 @@ class YOLODetector:
     
     def detect(self, frame):
         """Detect objects in frame using YOLO"""
-        # Get the frame dimensions dynamically to match the resized frame
         height, width = frame.shape[:2]
         results = self.model.predict(frame, imgsz=width, conf=self.CONF_THRESHOLD, iou=self.IOU_THRESHOLD)
         return results[0].boxes
@@ -423,7 +421,7 @@ class FaceDetector:
         self.mp_face = mp.solutions.face_detection
         self.face_detection = self.mp_face.FaceDetection(
             min_detection_confidence=min_detection_confidence,
-            model_selection=0  # Changed to lightweight model (0)
+            model_selection=0  
         )
     
     def detect(self, frame_rgb):
@@ -443,19 +441,17 @@ class MotionDetector:
     def detect(self, frame):
         """Detect motion in frame with automatic cooldown"""
         current_time = time.time()
-        
-        # Apply background subtraction
-        # Convert to grayscale for better performance
+    
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         fgmask = self.fgbg.apply(gray)
         
-        # Apply thresholding to remove noise
+        
         thresh = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY)[1]
         
-        # Find contours
+        
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # Check for significant motion
+     
         motion_detected = False
         for contour in contours:
             if cv2.contourArea(contour) > self.min_area:
@@ -463,7 +459,7 @@ class MotionDetector:
                 self.last_motion_time = current_time
                 break
                 
-        # Return true if motion was detected recently (within cooldown period)
+ 
         return motion_detected or (current_time - self.last_motion_time < self.motion_cooldown)
 
 class AudioPlayer:

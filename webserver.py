@@ -8,6 +8,7 @@ import cv2
 import asyncio
 import base64
 import sys
+from gtts import gTTS  
 
 # Import the detection system
 from detection_system import init_detection_system, start_detection_system
@@ -27,12 +28,7 @@ tts_queue = queue.Queue()
 # Function to process TTS requests from the queue
 def process_tts_queue():
     voices_dir = os.path.join(os.getcwd(), 'voices')
-    model_path = os.path.join(voices_dir, "en_US-amy-low.onnx")
-    config_path = os.path.join(voices_dir, "amyconfig.json")
-
-    if not (os.path.exists(model_path) and os.path.exists(config_path)):
-        print(f"Piper model or config not found in {voices_dir}.")
-        return
+    os.makedirs(voices_dir, exist_ok=True)  # Ensure the voices directory exists
 
     while True:
         text = tts_queue.get()
@@ -41,29 +37,16 @@ def process_tts_queue():
 
         try:
             print(f"[TTS] Speaking: {text}")
-            # Use Piper to synthesize audio and pipe it directly to aplay/ffplay
-            piper_cmd = [
-                "piper",
-                "--model", model_path,
-                "--config", config_path,
-                "--output_file", "-",  # output to stdout
-                "--sentence_silence", "0.3"  # slight pause between sentences
-            ]
-            if sys.platform == "win32":
-                # Windows: Save to file and play with powershell
-                temp_wav = os.path.join(os.getcwd(), "temp_tts.wav")
-                subprocess.run(piper_cmd + ["-f", "-"], input=text, text=True, stdout=open(temp_wav, "wb"))
-                subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{temp_wav}').PlaySync()"])
-                os.remove(temp_wav)
-            else:
-                # Linux/macOS: Stream audio to aplay or ffplay
-                player = ["aplay", "-q"] if sys.platform.startswith("linux") else ["ffplay", "-nodisp", "-autoexit", "-"]
-                piper_proc = subprocess.Popen(piper_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-                player_proc = subprocess.Popen(player, stdin=piper_proc.stdout)
-                piper_proc.stdin.write(text.encode('utf-8'))
-                piper_proc.stdin.close()
-                piper_proc.wait()
-                player_proc.wait()
+            # Use gTTS to synthesize audio
+            tts = gTTS(text=text, lang='en')
+            temp_mp3 = os.path.join(voices_dir, "temp_tts.mp3")
+            tts.save(temp_mp3)
+
+            # Play the audio file using mpg321
+            subprocess.run(["mpg321", "-q", temp_mp3])
+
+            # Remove the temporary audio file
+            os.remove(temp_mp3)
         except Exception as e:
             print(f"[TTS Error] {str(e)}")
         finally:
