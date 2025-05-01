@@ -638,6 +638,11 @@ class DetectionSystem:
         # Add MQ2 detection tracking
         self.mq2_gas_detected = False
 
+        # Sliding window for fire/smoke detection
+        self.fire_detection_window = []
+        self.smoke_detection_window = []
+        self.detection_window_size = 10  # Number of frames to track
+
     def init_telegram_service(self):
         """Reinitialize the Telegram service using the current configuration."""
         self.telegram_service = TelegramService(self.config_manager)
@@ -966,19 +971,20 @@ class DetectionSystem:
                     print(f"{Colors.RED}Error removing old face image: {str(e)}{Colors.RESET}")
     
     def update_alarm_state(self, fire, smoke, image_path=None, confirmed_by_mq2=False):
-        """Enhanced alarm state logic with persistence tracking, sound, and notifications"""
-        if fire and self.config["detection"]["fire"]:
-            self.fire_persistence_count += 1
-        else:
-            self.fire_persistence_count = max(0, self.fire_persistence_count - 1)  # Gradually decrease
+        """Enhanced alarm state logic with sliding window and persistence tracking."""
+        # Update sliding windows
+        self.fire_detection_window.append(fire)
+        self.smoke_detection_window.append(smoke)
 
-        if smoke and self.config["detection"]["smoke"]:
-            self.smoke_persistence_count += 1
-        else:
-            self.smoke_persistence_count = max(0, self.smoke_persistence_count - 1)  # Gradually decrease
+        # Trim windows to the defined size
+        if len(self.fire_detection_window) > self.detection_window_size:
+            self.fire_detection_window.pop(0)
+        if len(self.smoke_detection_window) > self.detection_window_size:
+            self.smoke_detection_window.pop(0)
 
-        fire_persist = self.fire_persistence_count >= self.ALARM_THRESHOLD
-        smoke_persist = self.smoke_persistence_count >= self.ALARM_THRESHOLD
+        # Determine if fire/smoke is persistently detected
+        fire_persist = any(self.fire_detection_window)
+        smoke_persist = any(self.smoke_detection_window)
 
         # Handle gas detection
         if confirmed_by_mq2 and not self.alarm_triggered:
@@ -988,7 +994,7 @@ class DetectionSystem:
             self.play_alarm_sound()
             self.telegram_service.send_gas_alert()
 
-        # Improved alarm state management
+        # Trigger alarm if fire or smoke is persistently detected
         if (fire_persist or smoke_persist) and not self.alarm_triggered:
             alarm_type = ""
             if fire_persist and smoke_persist:
@@ -1001,18 +1007,9 @@ class DetectionSystem:
                 alarm_type = "SMOKE"
                 self.system_status = "Smoke Detected"
 
-            mq2_status = "Yes" if confirmed_by_mq2 else "No"
             print(f"{Colors.BOLD}{Colors.RED}🔥🔥 ALARM STATE: PERSISTENT {alarm_type} DETECTED! 🔥🔥{Colors.RESET}")
-            print(f"{Colors.YELLOW}Confirmed by MQ2: {mq2_status}{Colors.RESET}")
             self.alarm_triggered = True
             self.play_alarm_sound()  # Start alarm
-
-            # Update detection timestamps
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            if fire_persist:
-                self.last_detections["fire"] = timestamp
-            if smoke_persist:
-                self.last_detections["smoke"] = timestamp
 
             # Send Telegram notification with the image
             if fire_persist:
@@ -1021,6 +1018,7 @@ class DetectionSystem:
             elif smoke_persist:
                 print(f"Sending smoke alert with image: {image_path}")
 
+        # Stop alarm if no fire or smoke is detected in the sliding window
         elif not fire_persist and not smoke_persist and self.alarm_triggered:
             print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire or Smoke detected. Resetting alarm...{Colors.RESET}")
             self.stop_alarm()  # Stop the alarm immediately
@@ -1052,17 +1050,17 @@ class DetectionSystem:
         self.alarm_thread.start()
 
     def stop_alarm(self):
-        """Safely stop the alarm"""
+        """Safely stop the alarm immediately"""
         self.alarm_playing = False
-        # Removed self.alarm.cleanup() here to avoid terminating audio resources while still in use
         if self.alarm_thread and self.alarm_thread.is_alive():
             self.alarm_thread.join(timeout=1)
-            
+        self.alarm.stop_sound()  # Ensure the sound stops immediately
         self.system_status = "Normal"
         self.alarm_triggered = False
         self.pre_alarm_logged = False
         self.fire_persistence_count = 0
         self.smoke_persistence_count = 0
+        print(f"{Colors.GREEN}Alarm stopped and system reset to Normal state.{Colors.RESET}")
 
     def shutdown(self):
         """Clean shutdown of the system"""
