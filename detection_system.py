@@ -898,35 +898,43 @@ class DetectionSystem:
         return face_detected
 
     def extract_face_roi(self, frame, detection, scale_factor=1.5):
-        """Extract face ROI with additional context"""
-        bboxC = detection.location_data.relative_bounding_box
+        """Extract face ROI with additional context based on landmarks."""
         ih, iw, _ = frame.shape
-        
-        # Basic face detection box
-        x = int(bboxC.xmin * iw)
-        y = int(bboxC.ymin * ih)
-        w = int(bboxC.width * iw)
-        h = int(bboxC.height * ih)
-        
-        # Get the face center 
-        center_x = x + w // 2
-        center_y = y + h // 2
-        
-        # Create a much larger box centered on the face
+
+        # Get the bounding box from landmarks
+        x_min = iw
+        y_min = ih
+        x_max = 0
+        y_max = 0
+
+        for landmark in detection.landmark:
+            x = int(landmark.x * iw)
+            y = int(landmark.y * ih)
+            x_min = min(x_min, x)
+            y_min = min(y_min, y)
+            x_max = max(x_max, x)
+            y_max = max(y_max, y)
+
+        # Expand the bounding box using the scale factor
+        w = x_max - x_min
+        h = y_max - y_min
+        center_x = x_min + w // 2
+        center_y = y_min + h // 2
+
         crop_w = int(w * scale_factor)
         crop_h = int(h * scale_factor)
-        
-        # Make taller than wide to ensure full head capture
+
+        # Ensure the box is taller than wide
         if crop_h < crop_w * 1.2:
             crop_h = int(crop_w * 1.2)
-        
-        # Calculate new box coordinates, centered on the face
+
+        # Calculate new box coordinates
         x1 = max(0, center_x - crop_w // 2)
         y1 = max(0, center_y - crop_h // 2)
         x2 = min(iw, x1 + crop_w)
         y2 = min(ih, y1 + crop_h)
-        
-        # Adjust if box is hitting frame boundaries
+
+        # Adjust if box hits frame boundaries
         if x1 == 0:
             x2 = min(iw, crop_w)
         if y1 == 0:
@@ -935,10 +943,10 @@ class DetectionSystem:
             x1 = max(0, iw - crop_w)
         if y2 == ih:
             y1 = max(0, ih - crop_h)
-        
+
         face_center = (center_x, center_y)
         face_roi = frame[y1:y2, x1:x2]
-        
+
         return face_roi, face_center, (x1, y1, x2, y2)
     
     def limit_saved_faces(self):
