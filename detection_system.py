@@ -897,16 +897,26 @@ class DetectionSystem:
             
         return face_detected
 
-    def extract_face_roi(self, frame, detection, scale_factor=1.5):
-        """Extract face ROI with additional context"""
-        bboxC = detection.location_data.relative_bounding_box
+    def extract_face_roi(self, frame, landmarks, scale_factor=1.5):
+        """Extract face ROI with additional context using face landmarks"""
         ih, iw, _ = frame.shape
         
+        # Find the bounding box of the face from landmarks
+        x_min = y_min = float('inf')
+        x_max = y_max = float('-inf')
+        
+        for landmark in landmarks.landmark:
+            x, y = int(landmark.x * iw), int(landmark.y * ih)
+            x_min = min(x_min, x)
+            y_min = min(y_min, y)
+            x_max = max(x_max, x)
+            y_max = max(y_max, y)
+        
         # Basic face detection box
-        x = int(bboxC.xmin * iw)
-        y = int(bboxC.ymin * ih)
-        w = int(bboxC.width * iw)
-        h = int(bboxC.height * ih)
+        x = x_min
+        y = y_min
+        w = x_max - x_min
+        h = y_max - y_min
         
         # Get the face center 
         center_x = x + w // 2
