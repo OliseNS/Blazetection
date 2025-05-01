@@ -802,8 +802,8 @@ class DetectionSystem:
                     self.mq2_gas_detected = self.mq2_sensor.read_sensor()
                     if self.mq2_gas_detected:
                         print(f"{Colors.RED}[{datetime.now().strftime('%H:%M:%S')}] Gas detected by MQ2 sensor!{Colors.RESET}")
+                        # only update state; sending alert is handled inside update_alarm_state
                         self.update_alarm_state(fire_detected, smoke_detected, confirmed_by_mq2=True)
-                        self.telegram_service.send_gas_alert()
                     else:
                         print(f"{Colors.GREEN}[{datetime.now().strftime('%H:%M:%S')}] No gas detected by MQ2 sensor.{Colors.RESET}")
                     
@@ -982,16 +982,17 @@ class DetectionSystem:
         fire_persist = self.fire_persistence_count >= self.ALARM_THRESHOLD
         smoke_persist = self.smoke_persistence_count >= self.ALARM_THRESHOLD
 
-        # Handle gas detection
+        # Handle gas detection once
         if confirmed_by_mq2 and not self.alarm_triggered:
             print(f"{Colors.BOLD}{Colors.RED}⚠️ GAS DETECTED! Triggering alarm...{Colors.RESET}")
             self.system_status = "Gas Detected"
             self.alarm_triggered = True
             self.play_alarm_sound()
             self.telegram_service.send_gas_alert()
-            self.mq2_gas_detected = True  # Persist gas detection status
+            # retain gas flag
+            self.mq2_gas_detected = True
 
-        # Improved alarm state management
+        # Persistent fire/smoke alarm as before…
         if (fire_persist or smoke_persist) and not self.alarm_triggered:
             alarm_type = ""
             if fire_persist and smoke_persist:
@@ -1024,13 +1025,13 @@ class DetectionSystem:
             elif smoke_persist:
                 print(f"Sending smoke alert with image: {image_path}")
 
-        # Only reset alarm if NO alarm condition is present
-        elif not (fire_persist and smoke_persist and self.mq2_gas_detected) and self.alarm_triggered:
+        # Only reset when *no* threats remain (fire, smoke or gas)
+        elif not (fire_persist or smoke_persist or self.mq2_gas_detected) and self.alarm_triggered:
             print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire, Smoke, or Gas detected. Resetting alarm...{Colors.RESET}")
-            self.stop_alarm()  # Stop the alarm immediately
+            self.stop_alarm()
             self.alarm_triggered = False
             self.system_status = "Normal"
-            self.mq2_gas_detected = False # Reset gas detection status
+            self.mq2_gas_detected = False
 
     def play_alarm_sound(self):
         """Play alarm sound in a thread-safe manner"""
