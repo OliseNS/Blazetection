@@ -1025,7 +1025,7 @@ class DetectionSystem:
                 print(f"Sending smoke alert with image: {image_path}")
 
         # Only reset alarm if NO alarm condition is present
-        elif not (fire_persist or smoke_persist or self.mq2_gas_detected) and self.alarm_triggered:
+        elif not (fire_persist and smoke_persist and self.mq2_gas_detected) and self.alarm_triggered:
             print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire, Smoke, or Gas detected. Resetting alarm...{Colors.RESET}")
             self.stop_alarm()  # Stop the alarm immediately
             self.alarm_triggered = False
