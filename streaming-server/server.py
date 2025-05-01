@@ -13,7 +13,6 @@ def generate_frames():
             # Encode frame to JPEG
             ret, buffer = cv2.imencode('.jpg', frame)
             frame = buffer.tobytes()
-            # Yield frame in byte format
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 

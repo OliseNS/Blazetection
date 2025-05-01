@@ -258,43 +258,43 @@ class TelegramService:
     def send_fire_alert(self, image_path=None):
         """Send a fire detection alert."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"🔥 FIRE DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
+        message = f"🔥 FIRE DETECTED at {timestamp} - Check livestream: http://firepi.local:8080/"
         return self.send_notification(message, image_path, "fire")
 
     def send_smoke_alert(self, image_path=None):
         """Send a smoke detection alert."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"💨 SMOKE DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
+        message = f"💨 SMOKE DETECTED at {timestamp} - Check livestream: http://firepi.local:8080/"
         return self.send_notification(message, image_path, "smoke")
 
     def send_motion_alert(self, image_path=None):
         """Send a person detection alert."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"👤 MOTION DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
+        message = f"👤 MOTION DETECTED at {timestamp} - Check livestream: http://firepi.local:8080/"
         return self.send_notification(message, image_path, "Motion")
 
     def send_face_alert(self, image_path=None):
         """Send a face detection alert."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"👁️ FACE DETECTED at {timestamp} - Check livestream: http://127.0.0.1:8080/video_feed"
+        message = f"👁️ FACE DETECTED at {timestamp} - Check livestream: http://firepi.local:8080/"
         return self.send_notification(message, image_path, "face")
 
     def send_test_message(self):
         """Send a test message to verify Telegram configuration."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"✅ TEST: Telegram integration working at {timestamp} - Livestream: http://127.0.0.1:8080/video_feed"
+        message = f"✅ TEST: Telegram integration working at {timestamp} - Livestream: http://firepi.local:8080/"
         return self.send_notification(message, None, "test")
 
     def send_welcome_message(self):
         """Send a welcome message when the system starts."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"🔧 SYSTEM ONLINE at {timestamp} - Livestream available: http://127.0.0.1:8080/video_feed"
+        message = f"🔧 SYSTEM ONLINE at {timestamp} - Livestream available: http://firepi.local:8080/"
         return self.send_notification(message, None, "test")
 
     def send_gas_alert(self):
         """Send a gas detection alert."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        message = f"⚠️ GAS DETECTED at {timestamp} - Check your environment immediately!"
+        message = f"⚠️ GAS DETECTED at {timestamp} - Check your environment immediately! - http://firepi.local:8080/"
         return self.send_notification(message, None, "gas")
 
 # Camera handling
