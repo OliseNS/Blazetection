@@ -989,6 +989,7 @@ class DetectionSystem:
             self.alarm_triggered = True
             self.play_alarm_sound()
             self.telegram_service.send_gas_alert()
+            self.mq2_gas_detected = True  # Persist gas detection status
 
         # Improved alarm state management
         if (fire_persist or smoke_persist) and not self.alarm_triggered:
@@ -1023,11 +1024,13 @@ class DetectionSystem:
             elif smoke_persist:
                 print(f"Sending smoke alert with image: {image_path}")
 
-        elif not fire_persist and not smoke_persist and self.alarm_triggered:
-            print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire or Smoke detected. Resetting alarm...{Colors.RESET}")
+        # Only reset alarm if NO alarm condition is present
+        elif not (fire_persist or smoke_persist or self.mq2_gas_detected) and self.alarm_triggered:
+            print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire, Smoke, or Gas detected. Resetting alarm...{Colors.RESET}")
             self.stop_alarm()  # Stop the alarm immediately
             self.alarm_triggered = False
             self.system_status = "Normal"
+            self.mq2_gas_detected = False # Reset gas detection status
 
     def play_alarm_sound(self):
         """Play alarm sound in a thread-safe manner"""
