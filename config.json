@@ -13,7 +13,7 @@
   },
   "system": {
     "camera_index": 0,
-    "camera_url": "http://192.168.5.166:5000",
+    "camera_url": "http://192.168.4.19:5000",
     "detection_interval": 0.5,
     "face_save_interval": 1.0,
     "alarm_threshold": 3,

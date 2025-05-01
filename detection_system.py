@@ -987,12 +987,13 @@ class DetectionSystem:
         smoke_persist = any(self.smoke_detection_window)
 
         # Handle gas detection
-        if confirmed_by_mq2 and not self.alarm_triggered:
+        if confirmed_by_mq2:
             print(f"{Colors.BOLD}{Colors.RED}⚠️ GAS DETECTED! Triggering alarm...{Colors.RESET}")
             self.system_status = "Gas Detected"
             self.alarm_triggered = True
             self.play_alarm_sound()
             self.telegram_service.send_gas_alert()
+            return  # Exit early to prevent resetting to "Normal"
 
         # Trigger alarm if fire or smoke is persistently detected
         if (fire_persist or smoke_persist) and not self.alarm_triggered:
@@ -1018,9 +1019,9 @@ class DetectionSystem:
             elif smoke_persist:
                 print(f"Sending smoke alert with image: {image_path}")
 
-        # Stop alarm if no fire or smoke is detected in the sliding window
-        elif not fire_persist and not smoke_persist and self.alarm_triggered:
-            print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire or Smoke detected. Resetting alarm...{Colors.RESET}")
+        # Stop alarm if no fire, smoke, or gas is detected in the sliding window
+        elif not fire_persist and not smoke_persist and not confirmed_by_mq2 and self.alarm_triggered:
+            print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire, Smoke, or Gas detected. Resetting alarm...{Colors.RESET}")
             self.stop_alarm()  # Stop the alarm immediately
             self.alarm_triggered = False
             self.system_status = "Normal"
