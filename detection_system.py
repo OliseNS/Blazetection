@@ -410,17 +410,25 @@ class YOLODetector:
 
 # Face detector
 class FaceDetector:
-    def __init__(self, min_detection_confidence=0.8):  
-        self.mp_face = mp.solutions.face_detection
-        self.face_detection = self.mp_face.FaceDetection(
+    def __init__(self, min_detection_confidence=0.8):
+        """
+        Initialize MediaPipe Face Mesh for more accurate and fast face detection.
+        """
+        self.mp_face_mesh = mp.solutions.face_mesh
+        self.face_mesh = self.mp_face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=5,  # Adjust based on your use case
             min_detection_confidence=min_detection_confidence,
-            model_selection=0  
+            min_tracking_confidence=0.5
         )
-    
+
     def detect(self, frame_rgb):
-        """Detect faces in frame"""
-        results = self.face_detection.process(frame_rgb)
-        return results.detections if results.detections else []
+        """
+        Detect faces using MediaPipe Face Mesh.
+        Returns a list of face landmarks if faces are detected.
+        """
+        results = self.face_mesh.process(frame_rgb)
+        return results.multi_face_landmarks if results.multi_face_landmarks else []
 
 # Motion detector
 class MotionDetector:
@@ -572,7 +580,7 @@ class DetectionSystem:
         # Initialize detectors
         self.object_detector = YOLODetector("model_ncnn_model")
         self.motion_detector = MotionDetector()
-        self.face_detector = FaceDetector()
+        self.face_detector = FaceDetector(min_detection_confidence=0.8)
         
         # Initialize face tracking
         self.tracked_faces = []
