@@ -638,9 +638,10 @@ class DetectionSystem:
         # Add MQ2 detection tracking
         self.mq2_gas_detected = False
 
-        # Sliding window for fire/smoke detection
+        # Sliding window for fire/smoke/gas detection
         self.fire_detection_window = []
         self.smoke_detection_window = []
+        self.gas_detection_window = []
         self.detection_window_size = 10  # Number of frames to track
 
     def init_telegram_service(self):
@@ -975,16 +976,20 @@ class DetectionSystem:
         # Update sliding windows
         self.fire_detection_window.append(fire)
         self.smoke_detection_window.append(smoke)
+        self.gas_detection_window.append(confirmed_by_mq2)  # Track gas detection
 
         # Trim windows to the defined size
         if len(self.fire_detection_window) > self.detection_window_size:
             self.fire_detection_window.pop(0)
         if len(self.smoke_detection_window) > self.detection_window_size:
             self.smoke_detection_window.pop(0)
+        if len(self.gas_detection_window) > self.detection_window_size:
+            self.gas_detection_window.pop(0)
 
-        # Determine if fire/smoke is persistently detected
+        # Determine if fire/smoke/gas is persistently detected
         fire_persist = any(self.fire_detection_window)
         smoke_persist = any(self.smoke_detection_window)
+        gas_persist = any(self.gas_detection_window)
 
         # Handle gas detection
         if confirmed_by_mq2:
@@ -1020,7 +1025,7 @@ class DetectionSystem:
                 print(f"Sending smoke alert with image: {image_path}")
 
         # Stop alarm if no fire, smoke, or gas is detected in the sliding window
-        elif not fire_persist and not smoke_persist and not confirmed_by_mq2 and self.alarm_triggered:
+        elif not fire_persist and not smoke_persist and not gas_persist and self.alarm_triggered:
             print(f"{Colors.BOLD}{Colors.GREEN}✅ Normal State: No persistent Fire, Smoke, or Gas detected. Resetting alarm...{Colors.RESET}")
             self.stop_alarm()  # Stop the alarm immediately
             self.alarm_triggered = False
