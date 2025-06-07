@@ -1,6 +1,6 @@
-# Blazetection
+# Inferno
 
-Blazetection is an intelligent real-time detection and alert system, primarily designed to run on devices like the Raspberry Pi. It combines advanced AI-based video analysis with hardware sensors to detect fire, smoke, motion, and faces, then delivers instant notifications and alarms via Telegram and on-device actions.
+Inferno is an intelligent real-time detection and alert system, primarily designed to run on devices like the Raspberry Pi. It combines advanced AI-based video analysis with hardware sensors to detect fire, smoke, motion, and faces, then delivers instant notifications and alarms via Telegram and on-device actions. Olisemeka Nmarkwe, the team leader of Neural2Lang for the Computer Architecture class, created the software and optimized the ML models. The teammates Brian Britton, Angel Njoku, and Collin Cowart contributed with research, funding, presentation, and hardware.
 
 ---
 
